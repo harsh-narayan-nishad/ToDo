@@ -70,7 +70,7 @@ export function HistoryPanel({ day, setDay, version, onChanged }: { day: string;
                       {l.startTime && <span className="ml-2 text-sm text-ink-faint">{clock(l.startTime)} – {clock(addMinutesToTime(l.startTime, l.minutes))}</span>}
                       {l.note && <span className="block text-sm text-ink-muted">{l.note}</span>}
                     </span>
-                    <Button size="sm" variant="ghost" aria-label="Remove entry" onClick={() => void removeLog(l.id)} className="hover:text-accent-extreme"><Trash2 className="h-4 w-4" /></Button>
+                    {l.day === now && <Button size="sm" variant="ghost" aria-label="Remove entry" onClick={() => void removeLog(l.id)} className="hover:text-accent-extreme"><Trash2 className="h-4 w-4" /></Button>}
                   </li>
                 ))}
               </ul>

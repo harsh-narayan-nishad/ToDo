@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, History, ListChecks, LogOut, Menu, Moon, Sun, UserRound, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { WheelSpinner } from "@/components/WheelSpinner";
 import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
@@ -73,7 +74,7 @@ export function TodoApp() {
   }, [menuOpen]);
   const openDay = useCallback((day: string) => { setHistoryDay(day); setTab("history"); }, []);
 
-  if (checking) return <div className="min-h-screen" />;
+  if (checking) return <div className="relative min-h-screen"><WheelSpinner label="Signing you in" /></div>;
   if (!user) return <LoginCard onSignedIn={setUser} />;
 
   return (

@@ -5,7 +5,8 @@
  */
 import { addDays, localDay } from "@/lib/days";
 
-export const BACKFILL_DAYS = 2;
+/** Each day is filled in on that day only; once it is over, its tasks and time are locked (see lockedProblem). */
+export const BACKFILL_DAYS = 0;
 export const MIN_TIMED_MINUTES = 5;
 const DAY_MINUTES = 24 * 60;
 
@@ -31,7 +32,7 @@ export interface Plan { startDay: string; dueDay: string; startTime: string | nu
 export function planProblem(p: Plan, now = nowLocal(), check = { start: true, due: true }): string | null {
   if (diff(p.startDay, p.dueDay) < 0) return "The due day must be on or after the start day.";
   if (check.due && diff(now.day, p.dueDay) < 0) return "The due day cannot be in the past.";
-  if (check.start && diff(p.startDay, now.day) > BACKFILL_DAYS) return `The start day can be at most ${BACKFILL_DAYS} days ago.`;
+  if (check.start && diff(p.startDay, now.day) > BACKFILL_DAYS) return BACKFILL_DAYS === 0 ? "The start day cannot be in the past." : `The start day can be at most ${BACKFILL_DAYS} days ago.`;
   if (!p.startTime !== !p.endTime) return "Pick a start and an end time, or tick All day.";
   if (p.startTime && p.endTime) {
     const span = diff(p.startDay, p.dueDay) * DAY_MINUTES + toMin(p.endTime) - toMin(p.startTime);
@@ -42,7 +43,14 @@ export function planProblem(p: Plan, now = nowLocal(), check = { start: true, du
   return null;
 }
 
-/** Days work can be logged for: today and the 2 before, but not after the day a finished task was finished. */
+/** A task whose day is over is read-only: finished on an earlier day, or still open after its due day. */
+export function lockedProblem(task: { status: string; dueDay: string; completedDay: string | null }, today = localDay()): string | null {
+  if (task.status === "done" && task.completedDay && task.completedDay < today) return "Finished on an earlier day. Past days are locked.";
+  if (task.status !== "done" && task.dueDay < today) return "Its day is over. Past days are locked.";
+  return null;
+}
+
+/** Days work can be logged for: today only (BACKFILL_DAYS), but not after the day a finished task was finished. */
 export function loggableDays(task: { status: string; completedDay: string | null }, today = localDay()): string[] {
   const days = Array.from({ length: BACKFILL_DAYS + 1 }, (_, i) => addDays(today, -i));
   return task.status === "done" && task.completedDay ? days.filter((d) => d <= (task.completedDay as string)) : days;

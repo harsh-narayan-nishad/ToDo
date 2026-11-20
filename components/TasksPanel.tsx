@@ -1,9 +1,12 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clock, Pencil, Plus, Trash2 } from "lucide-react";
-import { Badge, Button, Card, ConfirmDialog, Empty, FIELD, LABEL } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import LiquidGlass from "@/components/LiquidGlass";
+import { PanelLoader } from "@/components/WheelSpinner";
+import { Check, Clock, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
-import { earliestStart, planProblem, titleProblem } from "@/lib/rules";
+import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
 import { duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
@@ -19,6 +22,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   const [editing, setEditing] = useState<Task | null>(null);
   const [logging, setLogging] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
@@ -47,9 +51,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   }, [tasks, filter, now]);
 
   return (
-    <div className="flex flex-col gap-8">
-      <NewTask onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />
-
+    <div className="flex flex-col gap-8 pb-24">
       <div className="flex flex-wrap items-center gap-2">
         {(["open", "done", "all"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "primary" : "outline"} onClick={() => setFilter(f)}>{f === "open" ? "To do" : f === "done" ? "Done" : "All"}</Button>
@@ -58,8 +60,8 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
-      {tasks === null && !error && <p className="text-sm text-ink-muted">Loading…</p>}
-      {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : "No tasks. Add one above. It also appears in your Pacewise calendar."}</Empty>}
+      {tasks === null && !error && <PanelLoader label="Loading tasks" />}
+      {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
 
       {groups.map((g) => (
         <section key={g.key}>
@@ -71,6 +73,9 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
           </ul>
         </section>
       ))}
+
+      <AddButton onClick={() => setAdding(true)} />
+      {adding && <NewTaskSheet onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
 
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
       {logging && (
@@ -96,10 +101,12 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
 
 function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void }) {
   const done = t.status === "done";
+  /** Past days are read-only: no ticking, logging, editing or deleting. */
+  const locked = lockedProblem(t, today());
   return (
     <li className="flex items-start gap-4 px-4 py-4 sm:px-5">
-      <button onClick={onToggle} aria-label={done ? "Mark as not done" : "Mark as done"}
-        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors", done ? "border-accent-medium bg-accent-medium text-canvas" : "border-overlay/30 hover:border-accent-medium")}>
+      <button onClick={onToggle} disabled={!!locked} title={locked ?? undefined} aria-label={done ? "Mark as not done" : "Mark as done"}
+        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-60", done ? "border-accent-medium bg-accent-medium text-canvas" : "border-overlay/30", !done && !locked && "hover:border-accent-medium")}>
         {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
       </button>
       <div className="min-w-0 flex-1">
@@ -110,18 +117,31 @@ function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; o
           <span>{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</span>
           {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
           {done && t.completedDay && <span>· finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
+          {locked && <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      {!locked && <div className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete" className="hover:text-accent-extreme"><Trash2 className="h-4 w-4" /></Button>
-      </div>
+      </div>}
     </li>
   );
 }
 
-function NewTask({ onCreated }: { onCreated: (t: Task) => void }) {
+/** The floating + in liquid glass, bottom right; opens the New task panel. */
+function AddButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label="Add task" title="Add task"
+      className="glass-fab fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-5 z-40 grid h-16 w-16 place-items-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-10 md:right-10">
+      <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={32} blur={4} /></span>
+      <Plus className="relative h-7 w-7" strokeWidth={1.75} aria-hidden />
+    </button>
+  );
+}
+
+/** New task, in a liquid glass panel: title, notes, priority, days and time. */
+function NewTaskSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Task) => void }) {
   const now = today();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -131,9 +151,16 @@ function NewTask({ onCreated }: { onCreated: (t: Task) => void }) {
   const [allDay, setAllDay] = useState(true);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
-  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    titleRef.current?.focus();
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -144,41 +171,47 @@ function NewTask({ onCreated }: { onCreated: (t: Task) => void }) {
     setError(null);
     try {
       onCreated(await todoApi.create({ title: title.trim(), notes: notes.trim(), priority, startDay, dueDay, startTime: allDay ? null : startTime, endTime: allDay ? null : endTime }));
-      setTitle("");
-      setNotes("");
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add the task.");
-    } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <Card>
-      <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-5">
-        <div className="flex items-end gap-3">
-          <label className={cn(LABEL, "flex-1")}>New task
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" maxLength={120} className={FIELD} />
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-3 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="New task"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="glass-in relative w-full max-w-lg">
+        <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
+        <form onSubmit={(e) => void submit(e)} className="relative flex max-h-[85dvh] flex-col gap-5 overflow-y-auto p-6 sm:p-8">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-display text-2xl">New task</h2>
+            <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition-colors hover:bg-overlay/10 hover:text-ink"><X className="h-5 w-5" /></button>
+          </div>
+          <label className={LABEL}>Title
+            <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" maxLength={120} className={FIELD} />
           </label>
-          <Button type="submit" disabled={busy || !title.trim()}><Plus className="h-4 w-4" />Add</Button>
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <label className={LABEL}>Priority
-            <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={FIELD}>
-              <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-            </select>
+          <label className={LABEL}>Notes (optional)
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Details, links, steps…" className={cn(FIELD, "resize-none")} />
           </label>
-          <label className={LABEL}>Start<input type="date" value={startDay} min={earliestStart(now)} onChange={(e) => { setStartDay(e.target.value); if (e.target.value > dueDay) setDueDay(e.target.value); }} className={FIELD} /></label>
-          <label className={LABEL}>Due<input type="date" value={dueDay} min={startDay > now ? startDay : now} onChange={(e) => setDueDay(e.target.value)} className={FIELD} /></label>
-        </div>
-        <TimeFields allDay={allDay} setAllDay={setAllDay} startTime={startTime} setStartTime={setStartTime} endTime={endTime} setEndTime={setEndTime} />
-        {more ? (
-          <label className={LABEL}>Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} className={cn(FIELD, "resize-none")} /></label>
-        ) : (
-          <button type="button" onClick={() => setMore(true)} className="self-start text-sm text-ink-muted hover:text-ink">+ Add notes</button>
-        )}
-        {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
-      </form>
-    </Card>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <label className={LABEL}>Priority
+              <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={FIELD}>
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+              </select>
+            </label>
+            <label className={LABEL}>Start<input type="date" value={startDay} min={earliestStart(now)} onChange={(e) => { setStartDay(e.target.value); if (e.target.value > dueDay) setDueDay(e.target.value); }} className={FIELD} /></label>
+            <label className={LABEL}>Due<input type="date" value={dueDay} min={startDay > now ? startDay : now} onChange={(e) => setDueDay(e.target.value)} className={FIELD} /></label>
+          </div>
+          <TimeFields allDay={allDay} setAllDay={setAllDay} startTime={startTime} setStartTime={setStartTime} endTime={endTime} setEndTime={setEndTime} />
+          {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy} className="rounded-full">Cancel</Button>
+            <Button type="submit" disabled={busy || !title.trim()} className="rounded-full"><Plus className="h-4 w-4" />{busy ? "Adding…" : "Add task"}</Button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
   );
 }

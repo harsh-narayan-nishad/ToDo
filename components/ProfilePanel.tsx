@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { PanelLoader } from "@/components/WheelSpinner";
 import { Flame } from "lucide-react";
 import { Card, Stat } from "@/components/ui";
 import { Heatmap } from "@/components/Heatmap";
@@ -20,7 +21,7 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
   }, [version]);
 
   if (error) return <p className="text-sm text-accent-extreme" role="alert">{error}</p>;
-  if (!data) return <p className="text-sm text-ink-muted">Loading…</p>;
+  if (!data) return <PanelLoader label="Loading your profile" />;
   const { totals: t, consistency: c } = data;
   const maxMin = Math.max(60, ...data.heatmap.slice(-7).map((d) => d.minutes));
 

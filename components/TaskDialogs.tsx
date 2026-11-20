@@ -97,7 +97,7 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
 const QUICK = [15, 30, 60, 90, 120];
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-/** Log time worked on a task: today or the 2 days before, never in the future, never after a finished task was finished. */
+/** Log time worked on a task: today only (past days are locked), never in the future, never after a finished task was finished. */
 export function LogTimeDialog({ task, onClose, onLogged }: { task: Task; onClose: () => void; onLogged: (minutes: number) => void }) {
   const now = today();
   const days = loggableDays(task, now);
