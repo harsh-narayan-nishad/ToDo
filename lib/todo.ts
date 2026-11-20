@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { today, tzOffset } from "@/lib/days";
 
 export type Priority = "low" | "medium" | "high";
@@ -62,3 +62,27 @@ export const todoApi = {
   summary: () => api<Summary>("/todo/summary", { query: { today: today() } }),
   day: (day: string) => api<DayDetail>(`/todo/days/${day}`),
 };
+
+export interface BulkResult { created: Task[]; skipped: { index: number; title: string; startDay: string; reason: string }[] }
+/**
+ * The task planner: many tasks in one request (max 200). Tasks that break a rule are skipped with the reason.
+ * A backend from before the planner has no /todo/tasks/bulk (404): then the tasks are added one by one through the
+ * normal endpoint, which mirrors each into the calendar the same way.
+ */
+export async function createBulk(tasks: TaskInput[]): Promise<BulkResult> {
+  try {
+    return await api<BulkResult>("/todo/tasks/bulk", { method: "POST", body: { tasks, today: today(), tzOffset: tzOffset() } });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+  }
+  const result: BulkResult = { created: [], skipped: [] };
+  for (const [index, t] of tasks.entries()) {
+    try {
+      result.created.push(await todoApi.create(t));
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 0 || e.status === 401)) throw e; // offline or signed out: stop
+      result.skipped.push({ index, title: t.title, startDay: t.startDay, reason: e instanceof Error ? e.message : "Could not add this task." });
+    }
+  }
+  return result;
+}

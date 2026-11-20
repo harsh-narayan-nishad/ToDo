@@ -7,15 +7,18 @@ import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
-import { api, ApiError, logout, PACEWISE_URL, session, type User } from "@/lib/api";
+import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
+import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
 
-type Tab = "tasks" | "history" | "profile";
+type Tab = "tasks" | "history" | "profile" | "calendar";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "history", label: "History", icon: History },
   { id: "profile", label: "Profile", icon: UserRound },
+  // The Pacewise calendar, copied into To-do: it opens here instead of sending you to Pacewise.
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
 ];
 const THEME_KEY = "pacewise-todo-theme";
 
@@ -107,9 +110,6 @@ export function TodoApp() {
               {label}
             </button>
           ))}
-          <a href={PACEWISE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm text-ink-muted transition-colors  ">
-            <CalendarDays className="h-4 w-4" aria-hidden /> Pacewise calendar
-          </a>
         </nav>
         <div className="mt-auto hidden flex-col gap-3 text-sm text-ink-muted md:flex">
           <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left ">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
@@ -126,6 +126,7 @@ export function TodoApp() {
         {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}
+        {tab === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
       </main>
     </div>
   );

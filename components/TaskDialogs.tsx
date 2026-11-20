@@ -1,5 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { Button, FIELD, LABEL } from "@/components/ui";
 import { Modal } from "@/components/Modal";
@@ -7,6 +8,8 @@ import { addMinutesToTime, clock, dayLabel, duration, today } from "@/lib/days";
 import { earliestStart, loggableDays, logProblem, nowLocal, planProblem, titleProblem, BACKFILL_DAYS } from "@/lib/rules";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import LiquidGlass from "@/components/LiquidGlass";
+import { GlassButton } from "@/components/GlassButton";
 
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -72,6 +75,8 @@ export function AnalogClock({ value, onChange, from, label }: { value: string; o
   function at(deg: number, r: number) { return { x: 100 + r * Math.sin((deg * Math.PI) / 180), y: 100 - r * Math.cos((deg * Math.PI) / 180) }; }
   const hourTip = at(hourAngle, 50);
   const minuteTip = at(minuteAngle, 74);
+  const minuteTail = at(minuteAngle + 180, 12);
+  const hourTail = at(hourAngle + 180, 10);
 
   return (
     <div className="flex flex-col items-center gap-4 rounded-3xl border border-overlay/10 bg-overlay/5 px-4 py-5">
@@ -90,7 +95,8 @@ export function AnalogClock({ value, onChange, from, label }: { value: string; o
           })}
         </div>
       </div>
-      <svg ref={svgRef} viewBox="0 0 200 200" className="h-56 w-56 cursor-pointer touch-none select-none outline-none focus-visible:rounded-full focus-visible:ring-2 focus-visible:ring-accent-medium"
+      <div className="relative h-56 w-56">
+      <svg ref={svgRef} viewBox="0 0 200 200" className="absolute inset-0 h-full w-full cursor-pointer touch-none select-none outline-none focus-visible:rounded-full focus-visible:ring-2 focus-visible:ring-accent-medium"
         role="slider" tabIndex={0} aria-label={label} aria-valuemin={0} aria-valuemax={DAY - 5} aria-valuenow={total} aria-valuetext={clock(toTime(total))}
         onKeyDown={onKey}
         onPointerDown={(e) => { (e.currentTarget as Element).setPointerCapture(e.pointerId); grab(e); }}
@@ -109,12 +115,15 @@ export function AnalogClock({ value, onChange, from, label }: { value: string; o
           const p = at(i * 30, 70);
           return <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" className="fill-ink-muted text-[13px]">{h}</text>;
         })}
-        <line x1="100" y1="100" x2={minuteTip.x} y2={minuteTip.y} strokeLinecap="round" strokeWidth="2" className="stroke-ink/60" />
-        <circle cx={minuteTip.x} cy={minuteTip.y} r="5.5" className="fill-ink" />
-        <line x1="100" y1="100" x2={hourTip.x} y2={hourTip.y} strokeLinecap="round" strokeWidth="4.5" className="stroke-ink" />
-        <circle cx={hourTip.x} cy={hourTip.y} r="7" className="fill-accent-medium" />
-        <circle cx="100" cy="100" r="4" className="fill-ink" />
+        {/* watch-style hands: a short tail past the centre, a slim minute hand and a bolder hour hand */}
+        <line x1={minuteTail.x} y1={minuteTail.y} x2={minuteTip.x} y2={minuteTip.y} strokeLinecap="round" strokeWidth="1.75" className="stroke-ink/70" />
+        <line x1={hourTail.x} y1={hourTail.y} x2={hourTip.x} y2={hourTip.y} strokeLinecap="round" strokeWidth="4" className="stroke-ink" />
+        <circle cx="100" cy="100" r="5" className="fill-canvas stroke-ink" strokeWidth="2" />
       </svg>
+      {/* the grips at the hand tips: small lenses of liquid glass (the clock handles the dragging, so they let touches through) */}
+      <Knob x={minuteTip.x} y={minuteTip.y} size={20} />
+      <Knob x={hourTip.x} y={hourTip.y} size={26} strong />
+      </div>
     </div>
   );
 }
@@ -207,6 +216,39 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
   );
 }
 
+/** A round liquid glass grip on a clock hand, at x, y in the dial's 200 × 200 units. `strong` = the hour hand's (larger, with a centre mark). */
+function Knob({ x, y, size, strong }: { x: number; y: number; size: number; strong?: boolean }) {
+  return (
+    <span className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x / 2}%`, top: `${y / 2}%`, width: size, height: size }} aria-hidden>
+      <LiquidGlass width="100%" height="100%" radius={size / 2} blur={2} />
+      <span className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full", strong ? "h-1.5 w-1.5 bg-accent-medium" : "h-1 w-1 bg-ink/70")} />
+    </span>
+  );
+}
+
+/** The clock as a popup of liquid glass above everything (also above the New task panel and the planner). Escape, a click outside or Done closes only the popup. */
+export function ClockPopup({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
+    window.addEventListener("keydown", esc, true); // first, so the panel underneath stays open
+    return () => window.removeEventListener("keydown", esc, true);
+  }, [onClose]);
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-canvas/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}
+      onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}>
+      <div className="glass-in relative w-full max-w-sm">
+        <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
+        <div className="relative flex flex-col gap-4 p-5 sm:p-6">
+          <h3 className="font-display text-xl">{title}</h3>
+          {children}
+          <div className="flex justify-end"><GlassButton type="button" strong onClick={onClose}>Done</GlassButton></div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /** TimeFields with the analog clock: From and To show the time, and the picked one opens the clock below them. */
 function ClockTimeFields({ allDay, setAllDay, startTime, setStartTime, endTime, setEndTime, disabled }: {
   allDay: boolean; setAllDay: (v: boolean) => void; startTime: string; setStartTime: (v: string) => void; endTime: string; setEndTime: (v: string) => void; disabled?: boolean;
@@ -233,9 +275,15 @@ function ClockTimeFields({ allDay, setAllDay, startTime, setStartTime, endTime, 
         {!allDay && field("to", "To", endTime)}
       </div>
       {!allDay && open === "from" && (
-        <AnalogClock label="Start time" value={startTime} onChange={(v) => { setStartTime(v); if (!endTime || endTime <= v) setEndTime(addMinutesToTime(v, 60)); }} />
+        <ClockPopup title="Start time" onClose={() => setOpen(null)}>
+          <AnalogClock label="Start time" value={startTime} onChange={(v) => { setStartTime(v); if (!endTime || endTime <= v) setEndTime(addMinutesToTime(v, 60)); }} />
+        </ClockPopup>
       )}
-      {!allDay && open === "to" && <AnalogClock label="End time" value={endTime} from={startTime} onChange={setEndTime} />}
+      {!allDay && open === "to" && (
+        <ClockPopup title="End time" onClose={() => setOpen(null)}>
+          <AnalogClock label="End time" value={endTime} from={startTime} onChange={setEndTime} />
+        </ClockPopup>
+      )}
     </div>
   );
 }

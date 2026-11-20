@@ -2,8 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import LiquidGlass from "@/components/LiquidGlass";
+import { GlassButton } from "@/components/GlassButton";
+import { TaskPlanner } from "@/components/TaskPlanner";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
 import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
@@ -23,6 +25,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   const [logging, setLogging] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [adding, setAdding] = useState(false);
+  const [planning, setPlanning] = useState(false);
 
   const load = useCallback(async () => {
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
@@ -51,7 +54,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   }, [tasks, filter, now]);
 
   return (
-    <div className="flex flex-col gap-8 pb-24">
+    <div className="flex flex-col gap-8 pb-40">
       <div className="flex flex-wrap items-center gap-2">
         {(["open", "done", "all"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "primary" : "outline"} onClick={() => setFilter(f)}>{f === "open" ? "To do" : f === "done" ? "Done" : "All"}</Button>
@@ -74,7 +77,9 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
         </section>
       ))}
 
+      <PlanButton onClick={() => setPlanning(true)} />
       <AddButton onClick={() => setAdding(true)} />
+      {planning && <TaskPlanner onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
       {adding && <NewTaskSheet tasks={tasks ?? []} onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
 
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
@@ -129,6 +134,18 @@ function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; o
   );
 }
 
+/** "Plan tasks" in liquid glass, just above the +; opens the task planner (many tasks over many days). */
+function PlanButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label="Plan tasks for many days" title="Plan tasks for many days"
+      className="glass-fab fixed bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+5rem)] right-5 z-40 inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-[7.5rem] md:right-10">
+      <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={24} blur={4} /></span>
+      <CalendarRange className="relative h-5 w-5" strokeWidth={1.75} aria-hidden />
+      <span className="relative">Plan tasks</span>
+    </button>
+  );
+}
+
 /** The floating + in liquid glass, bottom right; opens the New task panel. */
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
@@ -140,17 +157,6 @@ function AddButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** A pill button in liquid glass, for the New task panel. `strong` = the main action (bolder, lightly tinted). */
-function GlassButton({ strong, className, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { strong?: boolean }) {
-  return (
-    <button {...props}
-      className={cn("glass-fab relative inline-flex h-11 items-center justify-center gap-2 rounded-full px-6 text-sm text-ink disabled:pointer-events-none disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium", strong && "font-semibold", className)}>
-      <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={22} blur={4} /></span>
-      {strong && <span className="absolute inset-0 rounded-full bg-overlay/10" aria-hidden />}
-      <span className="relative inline-flex items-center gap-2">{children}</span>
-    </button>
-  );
-}
 
 /** New task, in a liquid glass panel: title, notes, priority, days and time. */
 function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: () => void; onCreated: (t: Task) => void }) {
@@ -182,7 +188,7 @@ function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: (
     }
     return out;
   }, [tasks, title]);
-  const openTwin = tasks.find((t) => t.status === "open" && t.title.trim().toLowerCase() === title.trim().toLowerCase() && title.trim());
+  const openTwin = tasks.find((t) => t.status === "open" && t.title.trim().toLowerCase() === title.trim().toLowerCase() && title.trim() && t.startDay <= dueDay && t.dueDay >= startDay);
 
   /** Fill the form from a task added before (title, notes, priority and time; the days stay as picked). */
   function applySuggestion(t: Task) {
@@ -231,7 +237,7 @@ function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: (
           <label className={LABEL}>Title
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" maxLength={120} className={FIELD} />
           </label>
-          {openTwin && <p className="-mt-3 text-xs text-accent-fast">This task is already in your list and still open.</p>}
+          {openTwin && <p className="-mt-3 text-xs text-accent-fast">This task is already in your list for these days and still open.</p>}
           {suggestions.length > 0 && (
             <div className="-mt-2">
               <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-faint"><Sparkles className="h-3.5 w-3.5" aria-hidden />{title.trim() ? "Added before" : "Recent tasks"}</p>

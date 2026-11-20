@@ -81,3 +81,10 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .glass-fab, .glass-in { transition: none; animation: none; }
 }
+
+/* Planner sheet: the date picker and dropdown icons follow the app's theme instead of the browser default. */
+:root[data-theme="dark"] .sheet-native { color-scheme: dark; }
+:root[data-theme="light"] .sheet-native { color-scheme: light; }
+.sheet-native::-webkit-calendar-picker-indicator { opacity: 0.45; cursor: pointer; transition: opacity 150ms ease; }
+.sheet-native:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
+.sheet-native option { background-color: rgb(var(--canvas-raised)); color: rgb(var(--ink)); }
