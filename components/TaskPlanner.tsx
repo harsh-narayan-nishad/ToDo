@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarRange, Check, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -10,6 +10,8 @@ import { addDays, longDay, today } from "@/lib/days";
 import { titleProblem } from "@/lib/rules";
 import { createBulk, type BulkResult, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { GlassDropdown } from "@/components/GlassDropdown";
+import { INTERVALS, MAX_RANGE_DAYS, PATTERNS, planDays, repeatLabel, span, weekday, type Repeat } from "@/lib/repeat";
 import { ButtonWheel } from "@/components/WheelSpinner";
 
 /**
@@ -18,25 +20,11 @@ import { ButtonWheel } from "@/components/WheelSpinner";
  * ticked off on its own) and is added with one request; the server checks each one with the normal rules.
  */
 const MAX_TASKS = 200;
-const MAX_RANGE_DAYS = 365;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-type Repeat = "daily" | "weekdays" | "weekends" | "custom" | "weekly" | "monthly";
-const REPEATS: { id: Repeat; label: string }[] = [
-  { id: "daily", label: "Every day" },
-  { id: "weekdays", label: "Weekdays" },
-  { id: "weekends", label: "Weekends" },
-  { id: "custom", label: "Pick days" },
-  { id: "weekly", label: "Once a week" },
-  { id: "monthly", label: "Once a month" },
-];
-
-
 const parse = (day: string) => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d, 12); };
-/** 0 = Monday … 6 = Sunday. */
-const weekday = (day: string) => (parse(day).getDay() + 6) % 7;
-const span = (a: string, b: string) => Math.round((parse(b).getTime() - parse(a).getTime()) / 86_400_000);
 const monthEnd = (day: string) => { const d = parse(day); return addDays(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate()); };
+const short = (day: string) => parse(day).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 function presets(now: string): { label: string; from: string; to: string }[] {
   return [
@@ -46,28 +34,6 @@ function presets(now: string): { label: string; from: string; to: string }[] {
     { label: "This month", from: now, to: monthEnd(now) },
     { label: "Next 30 days", from: now, to: addDays(now, 29) },
   ];
-}
-
-/** Every day from `from` to `to` that matches the repeat rule. */
-function planDays(from: string, to: string, repeat: Repeat, picked: boolean[]): string[] {
-  const n = span(from, to);
-  if (n < 0 || n > MAX_RANGE_DAYS) return [];
-  const out: string[] = [];
-  const startDow = weekday(from);
-  const startDate = parse(from).getDate();
-  for (let i = 0; i <= n; i++) {
-    const d = addDays(from, i);
-    const w = weekday(d);
-    const keep =
-      repeat === "daily" ? true
-      : repeat === "weekdays" ? w < 5
-      : repeat === "weekends" ? w >= 5
-      : repeat === "custom" ? picked[w]
-      : repeat === "weekly" ? w === startDow
-      : parse(d).getDate() === startDate;
-    if (keep) out.push(d);
-  }
-  return out;
 }
 
 export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCreated: (tasks: Task[]) => void }) {
@@ -81,6 +47,8 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BulkResult | null>(null);
+  const firstDayRef = useRef<HTMLInputElement>(null);
+  const preset = quick.find((p) => p.from === from && p.to === to);
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -89,12 +57,23 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
   }, [onClose]);
 
   const days = useMemo(() => planDays(from, to, repeat, picked), [from, to, repeat, picked]);
+  /** The days one row lands on: its own Repeat if it has one, otherwise the plan's. */
+  const daysFor = useMemo(() => {
+    const cache = new Map<string, string[]>();
+    return (r: SheetRow) => {
+      if (!r.repeat) return days;
+      if (!cache.has(r.repeat)) cache.set(r.repeat, planDays(from, to, r.repeat, picked));
+      return cache.get(r.repeat) as string[];
+    };
+  }, [days, from, to, picked]);
   const filled = rows.filter((r) => r.title.trim());
   // Rows with their own Date are added on that day only; the rest repeat on every planned day.
   const repeating = filled.filter((r) => !r.day);
   const dated = filled.filter((r) => r.day);
-  const total = days.length * repeating.length + dated.length;
-  const clashes = useMemo(() => findClashes(rows, days), [rows, days]);
+  const total = repeating.reduce((n, r) => n + daysFor(r).length, 0) + dated.length;
+  /** Every day at least one task lands on, for the preview. */
+  const allDays = [...new Set([...repeating.flatMap((r) => daysFor(r)), ...dated.map((r) => r.day)])].sort();
+  const clashes = useMemo(() => findClashes(rows, daysFor), [rows, daysFor]);
   const rangeProblem = from < now ? "The first day cannot be in the past." : to < from ? "The last day must be on or after the first day." : span(from, to) > MAX_RANGE_DAYS ? `Plan at most ${MAX_RANGE_DAYS + 1} days at a time.` : null;
   const problem =
     rangeProblem ??
@@ -102,7 +81,7 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
     filled.map((r) => titleProblem(r.title)).find(Boolean) ??
     filled.map((r) => (!r.allDay && r.endTime <= r.startTime ? `“${r.title.trim()}”: the end time must be after the start time.` : null)).find(Boolean) ??
     dated.filter((r) => r.day < now).map((r) => `“${r.title.trim()}”: its date is in the past.`)[0] ??
-    (repeating.length > 0 && days.length === 0 ? "No day in this range matches the repeat you picked." : null) ??
+    repeating.filter((r) => daysFor(r).length === 0).map((r) => `“${r.title.trim()}”: no day in this range matches its repeat.`)[0] ??
     clashes.message ??
     (total > MAX_TASKS ? `That is ${total} tasks; one plan can add at most ${MAX_TASKS}. Shorten the range or repeat less often.` : null);
 
@@ -113,7 +92,7 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
     setError(null);
     try {
       const task = (r: SheetRow, day: string) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startDay: day, dueDay: day, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime });
-      const tasks = [...days.flatMap((day) => repeating.map((r) => task(r, day))), ...dated.map((r) => task(r, r.day))];
+      const tasks = [...repeating.flatMap((r) => daysFor(r).map((day) => task(r, day))), ...dated.map((r) => task(r, r.day))].sort((x, y) => x.startDay.localeCompare(y.startDay));
       const res = await createBulk(tasks);
       if (res.created.length) onCreated(res.created);
       if (res.skipped.length === 0) { onClose(); return; }
@@ -130,17 +109,15 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="glass-in relative w-full max-w-5xl">
         <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
-        <div className="relative flex max-h-[90dvh] flex-col overflow-y-auto p-6 sm:p-8">
-          <header className="mb-6 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 font-display text-2xl"><CalendarRange className="h-6 w-6" strokeWidth={1.5} aria-hidden />Task planner</h2>
-              <p className="mt-1 text-sm text-ink-muted">Add tasks for many days at once. Each day gets its own task, so you tick off every day on its own.</p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close" title="Close"
-              className="glass-fab relative grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium">
+        {/* the close button floats on the panel's frame: it stays put while the planner scrolls under it */}
+        <button type="button" onClick={onClose} aria-label="Close" title="Close"
+              className="glass-fab absolute right-4 top-4 z-20 grid h-11 w-11 shrink-0 sm:right-6 sm:top-6 place-items-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium">
               <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={22} blur={4} /></span>
               <X className="relative h-5 w-5" strokeWidth={1.75} aria-hidden />
             </button>
+        <div className="relative flex max-h-[90dvh] flex-col overflow-y-auto p-6 sm:p-8">
+          <header className="mb-6 flex items-start justify-between gap-3 pr-14">
+            <h2 className="flex items-center gap-2 self-center font-display text-2xl"><CalendarRange className="h-6 w-6" strokeWidth={1.5} aria-hidden />Task planner</h2>
           </header>
 
           {result ? (
@@ -149,32 +126,38 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
             <div className="flex flex-col gap-8">
               {/* 1. When */}
               <Section n={1} title="When">
-                <div className="flex flex-wrap gap-2">
-                  {quick.map((p) => {
-                    const on = p.from === from && p.to === to;
-                    return <Chip key={p.label} on={on} onClick={() => { setFrom(p.from); setTo(p.to); }}>{p.label}</Chip>;
-                  })}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <div>
+                    <p className={cn(LABEL, "mb-2")}>Range</p>
+                    <GlassDropdown label="Range" value={preset?.label ?? "custom"} display={preset ? `${preset.label} · ${short(from)} – ${short(to)}` : `Custom · ${short(from)} – ${short(to)}`}
+                      groups={[
+                        { title: "Quick ranges", items: quick.map((p) => ({ id: p.label, label: p.label, meta: `${short(p.from)} – ${short(p.to)}` })) },
+                        { title: "Your own", items: [{ id: "custom", label: "Custom dates", meta: "pick below" }] },
+                      ]}
+                      onSelect={(id) => { const p = quick.find((q) => q.label === id); if (p) { setFrom(p.from); setTo(p.to); } else firstDayRef.current?.focus(); }} />
+                  </div>
+                  <div>
+                    <p className={cn(LABEL, "mb-2")}>Repeat</p>
+                    <GlassDropdown label="Repeat" value={repeat} display={repeatLabel(repeat)}
+                      groups={[{ title: "Pattern", items: PATTERNS }, { title: "Interval", items: INTERVALS.map((x) => ({ ...x, meta: `${planDays(from, to, x.id, picked).length} days` })) }]}
+                      onSelect={(id) => setRepeat(id as Repeat)} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-5">
-                  <label className={LABEL}>First day<input type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
+                  <label className={LABEL}>First day<input ref={firstDayRef} type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
                   <label className={LABEL}>Last day<input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={FIELD} /></label>
                 </div>
-                <div>
-                  <p className={cn(LABEL, "mb-2")}>Repeat</p>
-                  <div className="flex flex-wrap gap-2">
-                    {REPEATS.map((r) => <Chip key={r.id} on={repeat === r.id} onClick={() => setRepeat(r.id)}>{r.label}</Chip>)}
+                {repeat === "custom" && (
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Days of the week">
+                    {WEEKDAYS.map((w, i) => (
+                      <button key={w} type="button" aria-pressed={picked[i]} onClick={() => setPicked((p) => p.map((v, j) => (j === i ? !v : v)))}
+                        className={cn("h-10 w-12 rounded-full border text-sm transition-colors", picked[i] ? "border-ink bg-ink text-canvas" : "border-overlay/15 text-ink-muted")}>{w}</button>
+                    ))}
                   </div>
-                  {repeat === "custom" && (
-                    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Days of the week">
-                      {WEEKDAYS.map((w, i) => (
-                        <button key={w} type="button" aria-pressed={picked[i]} onClick={() => setPicked((p) => p.map((v, j) => (j === i ? !v : v)))}
-                          className={cn("h-10 w-12 rounded-full border text-sm transition-colors", picked[i] ? "border-ink bg-ink text-canvas" : "border-overlay/15 text-ink-muted")}>{w}</button>
-                      ))}
-                    </div>
-                  )}
-                  {repeat === "weekly" && <p className="mt-2 text-xs text-ink-faint">Every {parse(from).toLocaleDateString(undefined, { weekday: "long" })}, the weekday of the first day.</p>}
-                  {repeat === "monthly" && <p className="mt-2 text-xs text-ink-faint">On day {parse(from).getDate()} of each month, the date of the first day.</p>}
-                </div>
+                )}
+                {repeat === "weekly" && <p className="text-xs text-ink-faint">Every {parse(from).toLocaleDateString(undefined, { weekday: "long" })}, the weekday of the first day.</p>}
+                {repeat === "monthly" && <p className="text-xs text-ink-faint">On day {parse(from).getDate()} of each month, the date of the first day.</p>}
+                {repeat.startsWith("every-") && <p className="text-xs text-ink-faint">{repeatLabel(repeat)}, counted from the first day: {days.slice(0, 4).map(short).join(", ")}{days.length > 4 ? " …" : ""}</p>}
               </Section>
 
               {/* 2. Tasks */}
@@ -187,15 +170,12 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   <p className="font-display text-3xl">{total} <span className="text-base text-ink-muted">task{total === 1 ? "" : "s"}</span></p>
                   <p className="text-sm text-ink-muted">
-                    {repeating.length > 0 && <>{repeating.length} task{repeating.length === 1 ? "" : "s"} × {days.length} day{days.length === 1 ? "" : "s"}{days.length > 0 && ` · ${longDay(days[0])}${days.length > 1 ? ` → ${longDay(days[days.length - 1])}` : ""}`}</>}
+                    {repeating.length > 0 && <>{repeating.length} repeating task{repeating.length === 1 ? "" : "s"}{allDays.length > 0 && ` · ${longDay(allDays[0])}${allDays.length > 1 ? ` → ${longDay(allDays[allDays.length - 1])}` : ""}`}</>}
                     {repeating.length > 0 && dated.length > 0 && " · "}
                     {dated.length > 0 && `${dated.length} on their own date${dated.length === 1 ? "" : "s"}`}
                   </p>
                 </div>
-                {(days.length > 0 || dated.length > 0) && (() => {
-                  const all = [...(repeating.length ? days : []), ...dated.map((r) => r.day)].sort();
-                  return all.length > 0 && <MonthsPreview from={all[0] < from ? all[0] : from} to={all[all.length - 1] > to ? all[all.length - 1] : to} days={all} />;
-                })()}
+                {allDays.length > 0 && <MonthsPreview from={allDays[0] < from ? allDays[0] : from} to={allDays[allDays.length - 1] > to ? allDays[allDays.length - 1] : to} days={allDays} />}
               </Section>
 
               {(problem || error) && <p className="text-sm text-accent-extreme" role="alert">{error ?? problem}</p>}
@@ -225,12 +205,6 @@ function Section({ n, title, children }: { n: number; title: string; children: R
   );
 }
 
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" aria-pressed={on} onClick={onClick}
-      className={cn("rounded-full border px-4 py-1.5 text-sm transition-colors", on ? "border-ink bg-ink text-canvas" : "border-overlay/15 bg-overlay/5 text-ink")}>{children}</button>
-  );
-}
 
 /** Month calendars from the first to the last day, with the planned days filled in (up to 6 months shown). */
 function MonthsPreview({ from, to, days }: { from: string; to: string; days: string[] }) {

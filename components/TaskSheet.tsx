@@ -5,6 +5,9 @@ import { AnalogClock, ClockPopup } from "@/components/TaskDialogs";
 import { addMinutesToTime, clock } from "@/lib/days";
 import type { Priority } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { INTERVALS, PATTERNS, parseRepeat, type Repeat } from "@/lib/repeat";
+import LiquidGlass from "@/components/LiquidGlass";
+import { CellSelect, RoundMenuButton, type DropdownGroup } from "@/components/GlassDropdown";
 
 /**
  * The planner's tasks as a spreadsheet, like Google Sheets: one row per task, type straight into the cells,
@@ -12,19 +15,21 @@ import { cn } from "@/lib/utils";
  * it fills the grid from there and adds rows as needed. A CSV / TSV file (File → Download → CSV in Google Sheets)
  * can be imported too. Columns are matched by their header (Title, Notes, Priority, Date, From, To) when there is one.
  */
-export interface SheetRow { key: number; title: string; notes: string; priority: Priority; day: string; allDay: boolean; startTime: string; endTime: string }
+/** `repeat` "" = the plan's own Repeat; otherwise this task's. Ignored when the row has a Date. */
+export interface SheetRow { key: number; title: string; notes: string; priority: Priority; day: string; repeat: Repeat | ""; allDay: boolean; startTime: string; endTime: string }
 
 let nextKey = 1000;
-export const blankRow = (): SheetRow => ({ key: nextKey++, title: "", notes: "", priority: "medium", day: "", allDay: true, startTime: "09:00", endTime: "10:00" });
+export const blankRow = (): SheetRow => ({ key: nextKey++, title: "", notes: "", priority: "medium", day: "", repeat: "", allDay: true, startTime: "09:00", endTime: "10:00" });
 export const MAX_ROWS = 100;
 
-const COLS = ["title", "notes", "priority", "day", "from", "to"] as const;
+const COLS = ["title", "notes", "priority", "day", "from", "to", "repeat"] as const;
 type Col = (typeof COLS)[number];
 const HEADERS: Record<Col, RegExp> = {
   title: /^(title|task|tasks|name|todo|to-?do|item|subject)$/i,
   notes: /^(notes?|description|details?|comments?)$/i,
   priority: /^(priority|prio|importance)$/i,
   day: /^(date|day|due|due ?date|on)$/i,
+  repeat: /^(repeat|repeats|recurrence|recurring|frequency|every)$/i,
   from: /^(from|start|start ?time|begins?|time)$/i,
   to: /^(to|end|end ?time|until|ends?)$/i,
 };
@@ -109,6 +114,10 @@ function setCell(row: SheetRow, col: Col, raw: string): SheetRow {
     case "notes": return { ...row, notes: v.slice(0, 2000) };
     case "priority": return { ...row, priority: parsePriority(v) ?? row.priority };
     case "day": return { ...row, day: v ? parseDay(v) ?? row.day : "" };
+    case "repeat": {
+      const r = parseRepeat(v);
+      return { ...row, repeat: !v ? "" : r && r !== "custom" ? r : row.repeat };
+    }
     case "from": {
       const t = parseTime(v);
       if (!t) return v ? row : { ...row, allDay: true };
@@ -151,8 +160,7 @@ const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
  * Timed rows that would sit at the same time on the same day: a row without a Date lands on every planned day,
  * a row with one only on that day. Returns each clashing row's key, and a sentence naming the first clash.
  */
-export function findClashes(rows: SheetRow[], days: string[]): { keys: Set<number>; message: string | null } {
-  const daySet = new Set(days);
+export function findClashes(rows: SheetRow[], daysFor: (r: SheetRow) => string[]): { keys: Set<number>; message: string | null } {
   const timed = rows.map((r, i) => ({ r, n: i + 1 })).filter(({ r }) => r.title.trim() && !r.allDay && r.endTime > r.startTime);
   const keys = new Set<number>();
   let message: string | null = null;
@@ -160,7 +168,9 @@ export function findClashes(rows: SheetRow[], days: string[]): { keys: Set<numbe
     for (let b = a + 1; b < timed.length; b++) {
       const x = timed[a].r;
       const y = timed[b].r;
-      const sameDay = !x.day && !y.day ? days.length > 0 : x.day && y.day ? x.day === y.day : daySet.has(x.day || y.day);
+      const sameDay = !x.day && !y.day
+        ? daysFor(x).some((d) => daysFor(y).includes(d))
+        : x.day && y.day ? x.day === y.day : daysFor(x.day ? y : x).includes(x.day || y.day);
       if (!sameDay || !(toMin(x.startTime) < toMin(y.endTime) && toMin(y.startTime) < toMin(x.endTime))) continue;
       keys.add(x.key);
       keys.add(y.key);
@@ -171,6 +181,17 @@ export function findClashes(rows: SheetRow[], days: string[]): { keys: Set<numbe
 }
 
 // ---- the grid -----------------------------------------------------------------------------
+
+/** The app's dropdown menus for the Priority and Repeat columns (cells and headers). */
+const PRIORITY_GROUPS: DropdownGroup[] = [{ title: "Priority", items: [{ id: "low", label: "Low" }, { id: "medium", label: "Medium" }, { id: "high", label: "High" }] }];
+const PRIORITY_LABEL: Record<Priority, string> = { low: "Low", medium: "Medium", high: "High" };
+const repeatGroups = (once: boolean): DropdownGroup[] => [
+  { title: "", items: [{ id: "", label: once ? "Once" : "Plan's repeat" }] },
+  { title: "Every N days", items: [{ id: "daily", label: "Every 1 day" }, ...INTERVALS.map((x, i) => ({ id: x.id, label: `Every ${i + 2} days` }))] },
+  { title: "Pattern", items: PATTERNS.filter((x) => x.id !== "custom" && x.id !== "daily") },
+];
+const repeatText = (r: Repeat | "") => repeatGroups(false).flatMap((g) => g.items).find((x) => x.id === r)?.label ?? "Plan's repeat";
+
 
 const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none placeholder:text-ink-faint";
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
@@ -219,31 +240,51 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
 
   const open = clockFor && rows.find((r) => r.key === clockFor.key);
 
+  /** Column widths: drag a header edge to change one (remembered on this device), double-click it to reset. */
+  const [widths, setWidths] = useState<number[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(WIDTHS_KEY) ?? "null") as number[] | null;
+      if (Array.isArray(saved) && saved.length === SHEET_COLS.length) return saved;
+    } catch { /* storage blocked */ }
+    return SHEET_COLS.map((c) => c.width);
+  });
+  const setWidth = (c: number, w: number) => setWidths((list) => {
+    const next = list.map((x, i) => (i === c ? Math.round(Math.min(640, Math.max(SHEET_COLS[c].min, w))) : x));
+    try { localStorage.setItem(WIDTHS_KEY, JSON.stringify(next)); } catch { /* storage blocked */ }
+    return next;
+  });
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-full border border-overlay/15 bg-overlay/5 px-4 py-1.5 text-sm text-ink">
-          <FileUp className="h-4 w-4" /> Import CSV
+        {/* the CSV icon in a round glass button, with "Import CSV" written beside it (both open the file picker) */}
+        <button type="button" onClick={() => fileRef.current?.click()} className="group inline-flex items-center gap-3 text-sm text-ink outline-none">
+          <span className="glass-fab relative grid h-10 w-10 shrink-0 place-items-center rounded-full group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-medium">
+            <span className="pointer-events-none absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={20} blur={3} /></span>
+            <FileUp className="relative h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+          </span>
+          Import CSV
         </button>
         <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,.xlsx,.xls,.ods,.numbers" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
-        <span className="text-xs text-ink-faint">or copy cells in Google Sheets / Excel and paste them into any cell</span>
       </div>
       {notice && <p className="text-xs text-ink-muted" role="status">{notice}</p>}
 
       <div className="overflow-x-auto rounded-2xl border border-overlay/10 bg-canvas/40">
-        <table ref={tableRef} className="w-full min-w-[760px] border-collapse text-left">
+        <table ref={tableRef} className="border-collapse text-left" style={{ tableLayout: "fixed", width: widths.reduce((x, y) => x + y, 0) }}>
+          <colgroup>{widths.map((w, c) => <col key={SHEET_COLS[c].id} style={{ width: w }} />)}</colgroup>
           <thead>
             <tr className="bg-overlay/5 text-xs uppercase tracking-wide text-ink-muted">
-              <th className="w-10 border-b border-r border-overlay/10 px-2 py-2 text-center font-medium">#</th>
-              <th className="border-b border-r border-overlay/10 px-3 py-2 font-medium">Title</th>
-              <th className="border-b border-r border-overlay/10 px-3 py-2 font-medium">Notes</th>
-              <th className="w-28 border-b border-r border-overlay/10 px-3 py-2 font-medium">Priority</th>
-              <th className="w-36 border-b border-r border-overlay/10 px-3 py-2 font-medium" title="Leave empty to repeat on every planned day">Date</th>
-              <th className="w-16 border-b border-r border-overlay/10 px-2 py-2 text-center font-medium">All day</th>
-              <th className="w-32 border-b border-r border-overlay/10 px-3 py-2 font-medium">From</th>
-              <th className="w-32 border-b border-r border-overlay/10 px-3 py-2 font-medium">To</th>
-              <th className="w-10 border-b border-overlay/10" aria-label="Remove" />
+              {SHEET_COLS.map((col, c) => (
+                <th key={col.id} title={col.hint} className={cn("relative border-b border-overlay/10 py-2 font-medium", c < SHEET_COLS.length - 1 && "border-r", col.center ? "px-2 text-center" : "px-3")}>
+                  {col.id === "priority" ? (
+                    <HeaderSetAll label="Priority" groups={PRIORITY_GROUPS} onPick={(v) => setRows((list) => list.map((r) => ({ ...r, priority: v as Priority })))} />
+                  ) : col.id === "repeat" ? (
+                    <HeaderSetAll label="Repeat" groups={repeatGroups(false)} onPick={(v) => setRows((list) => list.map((r) => (r.day ? r : { ...r, repeat: v as Repeat | "" })))} />
+                  ) : col.label}
+                  {col.resizable && <ResizeHandle onResize={(w) => setWidth(c, w)} onReset={() => setWidth(c, SHEET_COLS[c].width)} width={widths[c]} label={col.label} />}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -253,9 +294,8 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
                 <td className={TD}><input data-cell={`${i}-0`} value={r.title} maxLength={120} placeholder={i === 0 ? "e.g. Gym" : ""} onChange={(e) => update(r.key, { title: e.target.value })} onPaste={(e) => onPaste(e, i, 0)} onKeyDown={(e) => onKey(e, i, 0)} className={CELL} aria-label={`Row ${i + 1} title`} /></td>
                 <td className={TD}><input data-cell={`${i}-1`} value={r.notes} maxLength={2000} onChange={(e) => update(r.key, { notes: e.target.value })} onPaste={(e) => onPaste(e, i, 1)} onKeyDown={(e) => onKey(e, i, 1)} className={CELL} aria-label={`Row ${i + 1} notes`} /></td>
                 <td className={TD}>
-                  <select data-cell={`${i}-2`} value={r.priority} onChange={(e) => update(r.key, { priority: e.target.value as Priority })} onPaste={(e) => onPaste(e, i, 2)} className={cn(CELL, "sheet-native cursor-pointer pr-1")} aria-label={`Row ${i + 1} priority`}>
-                    <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                  </select>
+                  <CellSelect dataCell={`${i}-2`} value={r.priority} display={PRIORITY_LABEL[r.priority]} groups={PRIORITY_GROUPS} onSelect={(v) => update(r.key, { priority: v as Priority })}
+                    onPaste={(e) => onPaste(e, i, 2)} onKeyDown={(e) => onKey(e, i, 2)} label={`Row ${i + 1} priority`} />
                 </td>
                 <td className={TD}><input data-cell={`${i}-3`} type="date" value={r.day} onChange={(e) => update(r.key, { day: e.target.value })} onPaste={(e) => onPaste(e, i, 3)} className={cn(CELL, "sheet-native pr-1", !r.day && "text-ink-faint")} aria-label={`Row ${i + 1} date (empty = every planned day)`} /></td>
                 <td className={cn(TD, "text-center")}><SheetCheck checked={r.allDay} onChange={(on) => update(r.key, on ? { allDay: true } : { allDay: false, ...nextFreeSlot(rows, r.key) })} label={`Row ${i + 1} all day`} /></td>
@@ -267,6 +307,11 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
                       onClock={() => setClockFor({ key: r.key, which })} label={`Row ${i + 1} ${which === "from" ? "start" : "end"} time`} />
                   </td>
                 ))}
+                <td className={TD}>
+                  <CellSelect dataCell={`${i}-6`} value={r.day ? "" : r.repeat} display={r.day ? "Once" : repeatText(r.repeat)} groups={repeatGroups(!!r.day)} disabled={!!r.day} muted={!r.repeat}
+                    title={r.day ? "A task with a Date is added on that day only" : undefined}
+                    onSelect={(v) => update(r.key, { repeat: v as Repeat | "" })} onPaste={(e) => onPaste(e, i, 6)} onKeyDown={(e) => onKey(e, i, 6)} label={`Row ${i + 1} repeat`} />
+                </td>
                 <td className="border-b border-overlay/10 text-center">
                   {rows.length > 1 && <button type="button" onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))} aria-label={`Remove row ${i + 1}`} className="grid h-9 w-9 place-items-center rounded-full text-ink-faint"><Trash2 className="h-4 w-4" /></button>}
                 </td>
@@ -282,7 +327,6 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
             <Plus className="h-4 w-4" /> Add row
           </button>
         )}
-        <span className="text-xs text-ink-faint">Rows with a Date are added on that day only; rows without one repeat on every planned day.</span>
       </div>
 
       {open && clockFor && (
@@ -327,6 +371,48 @@ function SheetCheck({ checked, onChange, label }: { checked: boolean; onChange: 
         <Check className="h-3 w-3" strokeWidth={3} />
       </span>
     </label>
+  );
+}
+
+/** The sheet's columns, in order, with their starting width and the narrowest they may get. */
+const SHEET_COLS: { id: string; label: string; width: number; min: number; resizable?: boolean; center?: boolean; hint?: string }[] = [
+  { id: "num", label: "#", width: 44, min: 44, center: true },
+  { id: "title", label: "Title", width: 240, min: 100, resizable: true },
+  { id: "notes", label: "Notes", width: 220, min: 90, resizable: true },
+  { id: "priority", label: "Priority", width: 136, min: 104, resizable: true },
+  { id: "date", label: "Date", width: 160, min: 132, resizable: true, hint: "Leave empty to repeat; with a date the task is added on that day only" },
+  { id: "allday", label: "All day", width: 76, min: 64, resizable: true, center: true },
+  { id: "from", label: "From", width: 140, min: 112, resizable: true },
+  { id: "to", label: "To", width: 140, min: 112, resizable: true },
+  { id: "repeat", label: "Repeat", width: 176, min: 132, resizable: true, hint: "How often this task repeats; Plan's repeat follows the When section" },
+  { id: "del", label: "", width: 52, min: 52 },
+];
+const WIDTHS_KEY = "pacewise-todo-sheet-widths";
+
+/** The grip on a header's right edge: drag to resize the column, double-click to reset it, or use ← / → when focused. */
+function ResizeHandle({ onResize, onReset, width, label }: { onResize: (w: number) => void; onReset: () => void; width: number; label: string }) {
+  const start = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <span role="separator" aria-orientation="vertical" aria-label={`Resize ${label} column`} aria-valuenow={width} tabIndex={0}
+      onPointerDown={(e) => { e.preventDefault(); (e.currentTarget as Element).setPointerCapture(e.pointerId); start.current = { x: e.clientX, w: width }; }}
+      onPointerMove={(e) => { if (start.current) onResize(start.current.w + e.clientX - start.current.x); }}
+      onPointerUp={() => { start.current = null; }}
+      onPointerCancel={() => { start.current = null; }}
+      onDoubleClick={onReset}
+      onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); onResize(width + (e.key === "ArrowRight" ? 16 : -16)); } }}
+      className="group absolute -right-[3px] top-0 z-10 flex h-full w-[7px] cursor-col-resize touch-none justify-center outline-none">
+      <span className="h-full w-px bg-transparent transition-colors duration-150 group-active:bg-ink/60 group-focus-visible:bg-ink/60" />
+    </span>
+  );
+}
+
+/** A header with a small round glass dropdown button to its right (the app's own menu): picks one value for every row's cell in that column. */
+function HeaderSetAll({ label, groups, onPick }: { label: string; groups: DropdownGroup[]; onPick: (v: string) => void }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="truncate">{label}</span>
+      <RoundMenuButton groups={groups} onSelect={onPick} label={`Set ${label.toLowerCase()} for all rows`} />
+    </span>
   );
 }
 
