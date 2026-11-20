@@ -5,7 +5,7 @@
  *  - it answers → every call goes to the local backend;
  *  - no answer  → every call goes to the online backend.
  * If the local backend stops while the page is open, the next call that cannot connect switches to online.
- * Deployed (any other host), the configured address is used directly.
+ * Deployed (any other host), the online backend is used — unless NEXT_PUBLIC_API_URL names a non-localhost address.
  *
  * NEXT_PUBLIC_API_URL        = the local backend   (default http://localhost:4000/api/v1)
  * NEXT_PUBLIC_API_URL_ONLINE = the online backend  (default: the Pacewise backend on Render)
@@ -17,6 +17,10 @@ const PROBE_MS = 1500;
 
 /** The backend in use right now (decided by whenBackendChosen). */
 export let API_BASE = LOCAL_API;
+
+const isLocalUrl = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(u);
+/** Deployed: a localhost backend is unreachable, so use the online one unless a real address was configured. */
+const DEPLOYED_API = isLocalUrl(LOCAL_API) ? ONLINE_API : LOCAL_API;
 
 const onThisComputer = () => typeof window !== "undefined" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 
@@ -32,7 +36,7 @@ async function localIsUp(): Promise<boolean> {
 let choice: Promise<string> | null = null;
 export function whenBackendChosen(): Promise<string> {
   choice ??= (async () => {
-    API_BASE = !onThisComputer() ? LOCAL_API : (await localIsUp()) ? LOCAL_API : ONLINE_API;
+    API_BASE = !onThisComputer() ? DEPLOYED_API : (await localIsUp()) ? LOCAL_API : ONLINE_API;
     return API_BASE;
   })();
   return choice;
