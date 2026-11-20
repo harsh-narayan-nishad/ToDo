@@ -1,21 +1,24 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, History, ListChecks, LogOut, Menu, Moon, Sun, UserRound, X } from "lucide-react";
+import { CalendarDays, History, ListChecks, Sprout, LogOut, Menu, Moon, Sun, UserRound, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { WheelSpinner } from "@/components/WheelSpinner";
 import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { HabitsPanel } from "@/components/HabitsPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
 import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
 
-type Tab = "tasks" | "history" | "profile" | "calendar";
+type Tab = "tasks" | "history" | "habits" | "profile" | "calendar";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "history", label: "History", icon: History },
+  // Habit tracker: micro to macro habits, habits to quit, and sleep.
+  { id: "habits", label: "Habits", icon: Sprout },
   { id: "profile", label: "Profile", icon: UserRound },
   // The Pacewise calendar, copied into To-do: it opens here instead of sending you to Pacewise.
   { id: "calendar", label: "Calendar", icon: CalendarDays },
@@ -123,8 +126,9 @@ export function TodoApp() {
 
       <main className="min-w-0 flex-1">
         <h1 className="mb-6 font-display text-3xl">{TABS.find((t) => t.id === tab)?.label}.</h1>
-        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} />}
+        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
+        {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}
         {tab === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
       </main>

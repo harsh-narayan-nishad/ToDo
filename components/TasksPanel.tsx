@@ -4,12 +4,15 @@ import { createPortal } from "react-dom";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
 import { TaskPlanner } from "@/components/TaskPlanner";
+import { TaskHabits } from "@/components/TaskHabits";
+import { TaskOverview } from "@/components/TaskOverview";
+import { weekday } from "@/lib/repeat";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { BarChart3, CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL, Pager } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
 import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
-import { duration, rangeLabel, today, whenLabel } from "@/lib/days";
+import { addDays, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 import { ButtonWheel } from "@/components/WheelSpinner";
@@ -19,7 +22,7 @@ const PRIORITY_TONE = { high: "red", medium: "amber", low: "blue" } as const;
 const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
-export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => void; refreshKey?: number }) {
+export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
@@ -28,6 +31,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [adding, setAdding] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [overview, setOverview] = useState(false);
 
   const load = useCallback(async () => {
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
@@ -43,9 +47,9 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   }
 
   const now = today();
-  /** Upcoming is paged: a plan can add many future tasks. */
-  const [upPage, setUpPage] = useState(1);
-  useEffect(() => setUpPage(1), [filter]);
+  /** Every group is paged (10 a page): a plan can add many tasks. Back to page 1 when the filter changes. */
+  const [pages, setPages] = useState<Record<string, number>>({});
+  useEffect(() => setPages({}), [filter]);
   const groups = useMemo(() => {
     const list = (tasks ?? []).filter((t) => filter === "all" || t.status === filter);
     const sort = (a: Task, b: Task) => a.dueDay.localeCompare(b.dueDay) || RANK[a.priority] - RANK[b.priority];
@@ -60,8 +64,13 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   }, [tasks, filter, now]);
 
   const upcomingCount = (tasks ?? []).filter((t) => t.status === "open" && t.startDay > now).length;
-  /** The current Upcoming page, kept in range when tasks are added or removed. */
-  const page = (n: number) => Math.min(upPage, Math.max(1, Math.ceil(n / UP_PAGE)));
+  /** A group's current page, kept in range when tasks are added or removed. */
+  const page = (key: string, n: number) => Math.min(pages[key] ?? 1, Math.max(1, Math.ceil(n / UP_PAGE)));
+  /** Upcoming tasks that start by the end of this week (Sunday). */
+  const weekEnd = addDays(now, 6 - weekday(now));
+  const upcomingThisWeek = (tasks ?? []).filter((t) => t.status === "open" && t.startDay > now && t.startDay <= weekEnd).length;
+
+  const habitsSection = <TaskHabits key="habits" refreshKey={refreshKey} onlyDone={filter === "done"} onChanged={onChanged} onOpenHabits={onOpenHabits} />;
 
   return (
     <div className="flex flex-col gap-8 pb-40">
@@ -70,24 +79,29 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
           <Button key={f} size="sm" variant={filter === f ? "primary" : "outline"} onClick={() => setFilter(f)}>{f === "open" ? "To do" : f === "done" ? "Done" : "All"}</Button>
         ))}
         {tasks && <span className="ml-auto text-sm text-ink-faint">{tasks.filter((t) => t.status === "open").length} open · {tasks.filter((t) => t.status === "done").length} done</span>}
+        {tasks && <Button size="sm" variant="outline" onClick={() => setOverview(true)}><BarChart3 className="h-4 w-4" />Overview</Button>}
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
       {tasks === null && !error && <PanelLoader label="Loading tasks" />}
       {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : filter === "open" && upcomingCount > 0 ? `Nothing due today. ${upcomingCount} upcoming task${upcomingCount === 1 ? " is" : "s are"} under All.` : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
 
-      {groups.map((g) => (
+      {groups.flatMap((g, i) => [
+        // Today's habits sit right after the tasks for now (Overdue, Today), before Upcoming and Done.
+        ...((g.key === "upcoming" || g.key === "done") && (i === 0 || groups[i - 1].key === "overdue" || groups[i - 1].key === "today") ? [habitsSection] : []),
         <section key={g.key}>
-          <h2 className={cn("mb-3 text-sm uppercase tracking-wide", g.key === "overdue" ? "text-accent-extreme" : "text-ink-muted")}>{g.title} · {g.items.length}</h2>
+          <h2 className={cn("mb-3 text-sm uppercase tracking-wide", g.key === "overdue" ? "text-accent-extreme" : "text-ink-muted")}>{g.key === "upcoming" ? `Upcoming · ${upcomingThisWeek} this week · ${g.items.length} in all` : `${g.title} · ${g.items.length}`}</h2>
           <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-            {(g.key === "upcoming" ? g.items.slice((page(g.items.length) - 1) * UP_PAGE, page(g.items.length) * UP_PAGE) : g.items).map((t) => (
+            {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
               <TaskRow key={t.id} task={t} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)} />
             ))}
           </ul>
-          {g.key === "upcoming" && g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={setUpPage} /></div>}
-        </section>
-      ))}
+          {g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.key, g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={(n) => setPages((cur) => ({ ...cur, [g.key]: n }))} /></div>}
+        </section>,
+      ])}
+      {tasks !== null && !groups.some((g) => g.key === "upcoming" || g.key === "done") && habitsSection}
 
+      {overview && <TaskOverview tasks={tasks ?? []} onClose={() => setOverview(false)} />}
       <PlanButton onClick={() => setPlanning(true)} />
       <AddButton onClick={() => setAdding(true)} />
       {planning && <TaskPlanner onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}

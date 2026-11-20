@@ -2,6 +2,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ButtonWheel } from "@/components/WheelSpinner";
+import LiquidGlass from "@/components/LiquidGlass";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 // Same look as the main app: pill buttons, underlined fields, soft raised cards.
 type Variant = "primary" | "ghost" | "outline" | "danger";
@@ -62,11 +64,22 @@ export function Pager({ page, total, limit, onPage }: { page: number; total: num
     <div className="flex items-center justify-between gap-3 text-sm text-ink-muted">
       <span>{total} total</span>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button>
-        <span>Page {page} of {pages}</span>
-        <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</Button>
+        <PageButton label="Previous page" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /></PageButton>
+        <span className="tabular-nums">Page {page} of {pages}</span>
+        <PageButton label="Next page" disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight className="h-4 w-4" /></PageButton>
       </div>
     </div>
+  );
+}
+
+/** A round liquid glass button for the pager. */
+function PageButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
+      className="glass-fab relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink disabled:pointer-events-none disabled:opacity-35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium">
+      <span className="pointer-events-none absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={20} blur={3} /></span>
+      <span className="pointer-events-none relative">{children}</span>
+    </button>
   );
 }
 
