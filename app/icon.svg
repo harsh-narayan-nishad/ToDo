@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pacewise To-do: dark canvas tile, square corners like the app, a checked box in the accent green. -->
+  <rect width="32" height="32" fill="#0B0C0E"/>
+  <rect x="6.5" y="6.5" width="19" height="19" fill="none" stroke="#EDEEF0" stroke-opacity="0.35" stroke-width="2"/>
+  <path d="M10.5 16.5 L14.5 20.5 L22 11.5" fill="none" stroke="#7FC97F" stroke-width="3.2" stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>

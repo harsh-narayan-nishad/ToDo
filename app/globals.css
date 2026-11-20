@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities { .font-display { font-weight: 300; } }
+@layer base {
+  html { font-feature-settings: "ss01", "cv11"; text-rendering: optimizeLegibility; }
+  body { font-size: 16px; line-height: 24px; }
+  button, [role="button"], label { font-weight: 500; }
+  code, kbd, pre, samp { font-family: theme("fontFamily.mono"); }
+}
+
+/* Same theme tokens as the main app (dark is the default). */
+:root, :root[data-theme="dark"] {
+  --canvas: 11 12 14; --canvas-raised: 20 21 24;
+  --ink: 237 238 240; --ink-muted: 154 156 163; --ink-faint: 91 93 100;
+  --overlay: 255 255 255; --shadow-color: 0 0 0;
+}
+:root[data-theme="light"] {
+  --canvas: 251 251 250; --canvas-raised: 242 242 240;
+  --ink: 22 23 26; --ink-muted: 96 98 105; --ink-faint: 148 150 157;
+  --overlay: 15 15 15; --shadow-color: 20 20 20;
+}
+html, body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  transition: background-color 200ms ease, color 200ms ease;
+}
