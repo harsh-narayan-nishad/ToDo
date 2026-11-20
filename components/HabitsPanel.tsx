@@ -5,6 +5,8 @@ import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
 import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
+import OptionWheel from "@/components/OptionWheel";
+import { ClockPopup } from "@/components/TaskDialogs";
 import { HabitDetail, HabitEditor, HabitGrid, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
 import { ApiError } from "@/lib/api";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
@@ -297,7 +299,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const streak = currentStreak(h, byDay, now);
   const amount = h.kind === "count" || h.kind === "duration";
   const step = h.kind === "duration" ? (h.target >= 60 ? 15 : 5) : Math.max(1, Math.round(goal(h) / 10));
-  const [draft, setDraft] = useState<string | null>(null);
+  const [wheel, setWheel] = useState(false);
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
@@ -308,7 +310,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
         className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded-[6px] border transition-colors duration-150", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
         {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={onOpen} className="min-w-0 flex-[1_1_12rem] text-left sm:flex-1">
         <span className={cn("block break-words", done || skipped ? "text-ink-faint" : "text-ink", done && "line-through")}>{h.name}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
           <Badge tone={status === "completed" ? "blue" : status === "in-progress" ? "amber" : "neutral"}>{STATUS_LABEL[status]}</Badge>
@@ -328,23 +330,21 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
         })}
       </span>
       {amount && !skipped && (
-        <div className="ml-10 flex shrink-0 items-center gap-1 sm:ml-0">
+        <div className="order-3 ml-10 flex shrink-0 items-center gap-1 sm:order-none sm:ml-0">
           <button type="button" onClick={() => onAmount((e?.value ?? 0) - step)} disabled={!e} aria-label={`Less ${h.name}`} className="grid h-8 w-8 place-items-center border border-overlay/15 text-ink-muted disabled:opacity-30"><Minus className="h-4 w-4" /></button>
-          <label className="flex items-baseline gap-1 px-1 text-sm tabular-nums">
-            <input value={draft ?? String(e?.value ?? 0)} inputMode="numeric" aria-label={`${h.name} today`}
-              onFocus={(ev) => { setDraft(String(e?.value ?? 0)); ev.target.select(); }}
-              onChange={(ev) => setDraft(ev.target.value.replace(/[^\d]/g, "").slice(0, 6))}
-              onBlur={() => { if (draft !== null && Number(draft || 0) !== (e?.value ?? 0)) onAmount(Number(draft || 0)); setDraft(null); }}
-              onKeyDown={(ev) => { if (ev.key === "Enter") (ev.target as HTMLInputElement).blur(); }}
-              className="w-14 border-b border-overlay/20 bg-transparent text-right text-ink outline-none focus:border-ink" />
+          {/* Tap the amount to pick it on the Pacewise option wheel (scroll or drag up and down). */}
+          <button type="button" onClick={() => setWheel(true)} aria-label={`${h.name} today: ${e?.value ?? 0}. Pick on the wheel`}
+            className="flex items-baseline gap-1 px-1 text-sm tabular-nums">
+            <span className="min-w-[3.5rem] border-b border-overlay/20 text-right text-ink">{e?.value ?? 0}</span>
             <span className="whitespace-nowrap text-ink-faint">/ {h.kind === "duration" ? `${h.target} min` : h.target.toLocaleString()}</span>
-          </label>
+          </button>
           <button type="button" onClick={() => onAmount((e?.value ?? 0) + step)} aria-label={`More ${h.name}`} className="grid h-8 w-8 place-items-center border border-overlay/15 text-ink"><Plus className="h-4 w-4" /></button>
         </div>
       )}
+      {wheel && <AmountWheel habit={h} value={e?.value ?? 0} step={step} onChange={onAmount} onClose={() => setWheel(false)} />}
       {/* Skip today (or undo the skip) in a round liquid glass button. */}
       {(skipped || !done) && (
-        <div className="ml-10 flex shrink-0 items-center sm:ml-0">
+        <div className="order-2 ml-auto flex shrink-0 items-center self-start sm:order-none sm:ml-0 sm:self-center">
           <GlassRound onClick={() => onSkip(!skipped)} label={skipped ? `Undo skip of ${h.name}` : `Skip ${h.name} today`}
             title={skipped ? "Undo skip" : "Skip today: not done, not missed, the streak stays"}>
             {skipped ? <Undo2 className="h-4 w-4" /> : <SkipForward className="h-4 w-4" />}
@@ -352,6 +352,49 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * The Pacewise option wheel (components/OptionWheel.tsx, copied from Pacewise) for a count or time habit: scroll or
+ * drag to add or take away, in the row's steps (5 or 15 minutes, or a tenth of the goal), up to twice the goal.
+ */
+function AmountWheel({ habit: h, value, step, onChange, onClose }: { habit: Habit; value: number; step: number; onChange: (v: number) => void; onClose: () => void }) {
+  const values = useMemo(() => {
+    const cap = h.kind === "duration" ? 1440 : 100000;
+    const top = Math.min(cap, Math.max(goal(h) * 2, value, h.kind === "duration" ? 60 : 10));
+    const list: number[] = [];
+    for (let v = 0; v <= top && list.length < 400; v += step) list.push(v);
+    if (!list.includes(value)) list.push(value);
+    if (!list.includes(goal(h)) && goal(h) <= cap) list.push(goal(h));
+    return list.sort((a, b) => a - b);
+  }, [h, value, step]);
+  const label = (v: number) => (h.kind === "duration" ? minutesLabel(v) : `${v.toLocaleString()}${h.unit ? ` ${h.unit}` : ""}`);
+  return (
+    <ClockPopup title={h.name} onClose={onClose}>
+      <p className="-mt-2 text-sm text-ink-muted">Goal {goalLabel(h)}. Scroll or drag to add or take away.</p>
+      <div className="relative h-64">
+        <span className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 border-y border-overlay/15 bg-overlay/[0.04]" aria-hidden />
+        <OptionWheel
+          items={values.map(label)}
+          defaultSelected={Math.max(0, values.indexOf(value))}
+          textColor="rgb(var(--ink-faint))"
+          activeColor="rgb(var(--ink))"
+          side="left"
+          fontSize={1.75}
+          spacing={1.6}
+          curve={1}
+          tilt={8}
+          blur={1.5}
+          fade={0.28}
+          smoothing={160}
+          inset={24}
+          loop={false}
+          draggable
+          onChange={(i) => onChange(values[i])}
+        />
+      </div>
+    </ClockPopup>
   );
 }
 

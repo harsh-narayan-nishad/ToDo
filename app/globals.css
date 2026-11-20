@@ -73,6 +73,15 @@ html, body {
 /* The New task panel rises in. */
 @keyframes glass-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 .glass-in { animation: glass-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* The hamburger menu: a drawer that slides in from the right over a dimmed page, as in Pacewise. */
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes drawer-out { from { transform: none; } to { transform: translateX(100%); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+.drawer-in { animation: drawer-in 0.38s cubic-bezier(0.22, 1.2, 0.36, 1) both; }
+.drawer-out { animation: drawer-out 0.24s ease-in both; }
+.fade-in { animation: fade-in 0.2s ease-out both; }
+.fade-out { animation: fade-out 0.24s ease-in both; }
 
 /* people who asked their system for less transparency or motion get solid, still surfaces */
 @media (prefers-reduced-transparency: reduce) {

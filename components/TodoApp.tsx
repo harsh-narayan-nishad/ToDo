@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, History, ListChecks, Sprout, LogOut, Menu, Moon, Sun, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { WheelSpinner } from "@/components/WheelSpinner";
 import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
@@ -12,11 +13,12 @@ import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
 import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
+import { isNeetAspirant } from "@/lib/neetSyllabus";
 
 type Tab = "tasks" | "history" | "habits" | "profile" | "calendar";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
-  { id: "history", label: "History", icon: History },
+  // History is in the hamburger menu, not here.
   // Habit tracker: micro to macro habits, habits to quit, and sleep.
   { id: "habits", label: "Habits", icon: Sprout },
   { id: "profile", label: "Profile", icon: UserRound },
@@ -67,17 +69,6 @@ export function TodoApp() {
     window.addEventListener("focus", onVisible);
     return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
   }, []);
-  /** Phone/tablet only: theme and sign-in details live behind the hamburger button. */
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [menuOpen]);
   const openDay = useCallback((day: string) => { setHistoryDay(day); setTab("history"); }, []);
 
   if (checking) return <div className="relative min-h-screen"><WheelSpinner label="Signing you in" /></div>;
@@ -86,24 +77,10 @@ export function TodoApp() {
   return (
     <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
       <aside className="flex shrink-0 flex-col gap-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
-        <div ref={menuRef} className="relative flex items-center justify-between">
+        <div className="relative flex items-center justify-between">
           <Logo />
-          <button onClick={() => setMenuOpen((o) => !o)} aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="account-menu"
-            className="p-2 text-ink-muted transition-colors   md:hidden">
-            {menuOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
-          </button>
-          {menuOpen && (
-            <div id="account-menu" className="absolute right-0 top-full z-50 mt-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col gap-3 border border-overlay/10 bg-canvas-raised p-4 text-sm text-ink-muted shadow-themed md:hidden">
-              <div>
-                <p className="truncate text-ink">{user.name}</p>
-                <p className="truncate text-xs text-ink-faint">@{user.username}</p>
-              </div>
-              <div className="flex flex-col gap-3 border-t border-overlay/10 pt-3">
-                <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left ">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
-                <button onClick={() => { setMenuOpen(false); void signOut(); }} className="flex items-center gap-2 text-left "><LogOut className="h-4 w-4" /> Sign out</button>
-              </div>
-            </div>
-          )}
+          {/* The Pacewise-style hamburger menu: History, theme, and the account with Log out. */}
+          <HamburgerMenu user={user} light={light} setLight={setLight} onHistory={() => setTab("history")} onSignOut={() => void signOut()} />
         </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Sections">
           {TABS.map(({ id, label, icon: Icon }) => (
@@ -125,8 +102,8 @@ export function TodoApp() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        <h1 className="mb-6 font-display text-3xl">{TABS.find((t) => t.id === tab)?.label}.</h1>
-        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} />}
+        <h1 className="mb-6 font-display text-3xl">{tab === "history" ? "History" : TABS.find((t) => t.id === tab)?.label}.</h1>
+        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
         {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}

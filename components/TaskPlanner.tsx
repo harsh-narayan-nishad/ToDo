@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { GlassDropdown } from "@/components/GlassDropdown";
 import { INTERVALS, MAX_RANGE_DAYS, PATTERNS, planDays, repeatLabel, span, weekday, type Repeat } from "@/lib/repeat";
 import { ButtonWheel } from "@/components/WheelSpinner";
+import { ClockPopup } from "@/components/TaskDialogs";
 
 /**
  * The task planner: several tasks over many days in one go — a week of workouts, a month of revision,
@@ -36,7 +37,7 @@ function presets(now: string): { label: string; from: string; to: string }[] {
   ];
 }
 
-export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCreated: (tasks: Task[]) => void }) {
+export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () => void; onCreated: (tasks: Task[]) => void; neet?: boolean }) {
   const now = today();
   const quick = useMemo(() => presets(now), [now]);
   const [from, setFrom] = useState(now);
@@ -48,6 +49,8 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BulkResult | null>(null);
   const firstDayRef = useRef<HTMLInputElement>(null);
+  /** "Custom dates" in the Range menu opens its own small popup with the first and last day. */
+  const [customOpen, setCustomOpen] = useState(false);
   const preset = quick.find((p) => p.from === from && p.to === to);
 
   useEffect(() => {
@@ -132,9 +135,18 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
                     <GlassDropdown label="Range" value={preset?.label ?? "custom"} display={preset ? `${preset.label} · ${short(from)} – ${short(to)}` : `Custom · ${short(from)} – ${short(to)}`}
                       groups={[
                         { title: "Quick ranges", items: quick.map((p) => ({ id: p.label, label: p.label, meta: `${short(p.from)} – ${short(p.to)}` })) },
-                        { title: "Your own", items: [{ id: "custom", label: "Custom dates", meta: "pick below" }] },
+                        { title: "Your own", items: [{ id: "custom", label: "Custom dates", meta: preset ? "pick days" : `${short(from)} – ${short(to)}` }] },
                       ]}
-                      onSelect={(id) => { const p = quick.find((q) => q.label === id); if (p) { setFrom(p.from); setTo(p.to); } else firstDayRef.current?.focus(); }} />
+                      onSelect={(id) => { const p = quick.find((q) => q.label === id); if (p) { setFrom(p.from); setTo(p.to); } else setCustomOpen(true); }} />
+                    {customOpen && (
+                      <ClockPopup title="Custom dates" onClose={() => setCustomOpen(false)}>
+                        <div className="grid grid-cols-2 gap-5">
+                          <label className={LABEL}>First day<input type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
+                          <label className={LABEL}>Last day<input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={FIELD} /></label>
+                        </div>
+                        <p className="text-sm text-ink-muted">{to >= from ? `${span(from, to) + 1} day${span(from, to) === 0 ? "" : "s"} · ${longDay(from)}${from !== to ? ` → ${longDay(to)}` : ""}` : "The last day must be on or after the first day."}</p>
+                      </ClockPopup>
+                    )}
                   </div>
                   <div>
                     <p className={cn(LABEL, "mb-2")}>Repeat</p>
@@ -162,7 +174,7 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
 
               {/* 2. Tasks */}
               <Section n={2} title="Tasks">
-                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} />
+                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} />
               </Section>
 
               {/* 3. Preview */}
@@ -179,7 +191,7 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
               </Section>
 
               {(problem || error) && <p className="text-sm text-accent-extreme" role="alert">{error ?? problem}</p>}
-              <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 pt-2">
+              <div className="sticky -bottom-6 -mx-6 -mb-6 flex justify-end gap-2 bg-gradient-to-t from-canvas-raised via-canvas-raised/90 to-transparent px-6 pb-6 pt-8 sm:-bottom-8 sm:-mx-8 sm:-mb-8 sm:px-8 sm:pb-8">
                 <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
                 <GlassButton type="button" onClick={() => void submit()} disabled={busy || !!problem} strong>
                   {busy ? <ButtonWheel /> : <Check className="h-4 w-4" />}{busy ? "Adding…" : `Add ${total} task${total === 1 ? "" : "s"}`}

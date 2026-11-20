@@ -8,13 +8,14 @@ import { TaskHabits } from "@/components/TaskHabits";
 import { TaskOverview } from "@/components/TaskOverview";
 import { weekday } from "@/lib/repeat";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { BarChart3, CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { BarChart3, BookOpen, CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL, Pager } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
 import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
 import { addDays, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { searchSyllabus, syllabusKey, syllabusNote, syllabusPath, syllabusTitle, type SyllabusItem } from "@/lib/neetSyllabus";
 import { ButtonWheel } from "@/components/WheelSpinner";
 
 type Filter = "open" | "done" | "all";
@@ -22,7 +23,8 @@ const PRIORITY_TONE = { high: "red", medium: "amber", low: "blue" } as const;
 const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
-export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void }) {
+/** `neet` = the signed-in user is preparing for NEET: task titles then also search the NEET syllabus and NCERT chapters. */
+export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
@@ -104,8 +106,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits }: { onChan
       {overview && <TaskOverview tasks={tasks ?? []} onClose={() => setOverview(false)} />}
       <PlanButton onClick={() => setPlanning(true)} />
       <AddButton onClick={() => setAdding(true)} />
-      {planning && <TaskPlanner onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
-      {adding && <NewTaskSheet tasks={tasks ?? []} onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
+      {planning && <TaskPlanner neet={neet} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
+      {adding && <NewTaskSheet neet={neet} tasks={tasks ?? []} onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
 
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
       {logging && (
@@ -183,8 +185,16 @@ function AddButton({ onClick }: { onClick: () => void }) {
 }
 
 
+/** Wraps the searched words in <mark>, as the Pacewise docs search does. */
+function Marked({ text, q }: { text: string; q: string }) {
+  const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!words.length) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));
+  return <>{parts.map((p, i) => (i % 2 ? <mark key={i} className="rounded bg-[#306fdb]/20 px-0.5 text-inherit">{p}</mark> : <span key={i}>{p}</span>))}</>;
+}
+
 /** New task, in a liquid glass panel: title, notes, priority, days and time. */
-function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: () => void; onCreated: (t: Task) => void }) {
+function NewTaskSheet({ tasks, onClose, onCreated, neet }: { tasks: Task[]; onClose: () => void; onCreated: (t: Task) => void; neet: boolean }) {
   const now = today();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -197,6 +207,19 @@ function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  /** Every title typed is also a search of the NEET syllabus (Physics, Chemistry, Biology), shown like the docs search. */
+  const [searching, setSearching] = useState(false);
+  const [active, setActive] = useState(-1);
+  const syllabus = useMemo(() => (neet ? searchSyllabus(title) : []), [title, neet]);
+  const showSyllabus = searching && title.trim().length > 0 && syllabus.length > 0;
+  useEffect(() => setActive(-1), [title]);
+  function pickSyllabus(x: SyllabusItem) {
+    setTitle(syllabusTitle(x));
+    if (!notes.trim()) setNotes(syllabusNote(x));
+    setSearching(false);
+    setError(null);
+    titleRef.current?.focus();
+  }
 
   /** Tasks added before, newest first, one per title: matching what is typed, or the most recent while the title is empty. */
   const suggestions = useMemo(() => {
@@ -260,8 +283,32 @@ function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: (
             <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition-colors  "><X className="h-5 w-5" /></button>
           </div>
           <label className={LABEL}>Title
-            <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" maxLength={120} className={FIELD} />
+            <input ref={titleRef} value={title} onChange={(e) => { setTitle(e.target.value); setSearching(true); }} placeholder={neet ? "What needs doing? Search the NEET syllabus too" : "What needs doing?"} maxLength={120} className={FIELD}
+              role="combobox" aria-expanded={showSyllabus} aria-controls="syllabus-results" aria-autocomplete="list" autoComplete="off"
+              onKeyDown={(e) => {
+                if (!showSyllabus) return;
+                if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(syllabus.length - 1, a + 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); }
+                else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pickSyllabus(syllabus[active]); }
+                else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setSearching(false); }
+              }} />
           </label>
+          {showSyllabus && (
+            <ul id="syllabus-results" role="listbox" aria-label="NEET syllabus" className="-mt-3 flex max-h-72 shrink-0 flex-col overflow-y-auto rounded-2xl border border-overlay/10 bg-canvas/80 p-1.5">
+              {syllabus.map((x, i) => (
+                <li key={syllabusKey(x)} role="option" aria-selected={i === active}>
+                  <button type="button" onClick={() => pickSyllabus(x)} onMouseEnter={() => setActive(i)}
+                    className={cn("flex w-full items-start gap-3.5 rounded-xl px-4 py-3 text-left", i === active && "bg-overlay/[0.06]")}>
+                    <BookOpen className="mt-[3px] h-[18px] w-[18px] shrink-0 text-ink-muted" aria-hidden />
+                    <span className="min-w-0">
+                      <span className="block text-[15px] font-medium leading-snug tracking-[-0.01em] text-ink"><Marked text={x.topic ?? x.unit} q={title} /></span>
+                      <span className="mt-1 block text-[13px] leading-[1.4] text-ink-muted"><Marked text={syllabusPath(x)} q={title} /></span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {openTwin && <p className="-mt-3 text-xs text-accent-fast">This task is already in your list for these days and still open.</p>}
           {suggestions.length > 0 && (
             <div className="-mt-2">

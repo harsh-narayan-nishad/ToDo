@@ -1,6 +1,8 @@
 "use client";
-import { useRef, useState } from "react";
-import { Check, Clock as ClockIcon, FileUp, Plus, Trash2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { BookOpen, Check, Clock as ClockIcon, FileUp, Plus, Trash2 } from "lucide-react";
+import { searchSyllabus, syllabusKey, syllabusNote, syllabusPath, syllabusTitle, type SyllabusItem } from "@/lib/neetSyllabus";
 import { AnalogClock, ClockPopup } from "@/components/TaskDialogs";
 import { addMinutesToTime, clock } from "@/lib/days";
 import type { Priority } from "@/lib/todo";
@@ -197,7 +199,7 @@ const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none plac
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
 const TD = "border-b border-r border-overlay/10 p-0 transition-[background-color,box-shadow] duration-150 focus-within:bg-overlay/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgb(var(--ink)/0.45)]";
 
-export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number> }) {
+export function TaskSheet({ rows, setRows, clashes, neet = false }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [clockFor, setClockFor] = useState<{ key: number; which: "from" | "to" } | null>(null);
@@ -270,7 +272,7 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
       </div>
       {notice && <p className="text-xs text-ink-muted" role="status">{notice}</p>}
 
-      <div className="overflow-x-auto rounded-2xl border border-overlay/10 bg-canvas/40">
+      <div className="relative overflow-x-auto rounded-2xl border border-overlay/10 bg-canvas/40">
         <table ref={tableRef} className="border-collapse text-left" style={{ tableLayout: "fixed", width: widths.reduce((x, y) => x + y, 0) }}>
           <colgroup>{widths.map((w, c) => <col key={SHEET_COLS[c].id} style={{ width: w }} />)}</colgroup>
           <thead>
@@ -291,7 +293,10 @@ export function TaskSheet({ rows, setRows, clashes }: { rows: SheetRow[]; setRow
             {rows.map((r, i) => (
               <tr key={r.key}>
                 <td className="border-b border-r border-overlay/10 bg-overlay/5 text-center text-xs tabular-nums text-ink-faint">{i + 1}</td>
-                <td className={TD}><input data-cell={`${i}-0`} value={r.title} maxLength={120} placeholder={i === 0 ? "e.g. Gym" : ""} onChange={(e) => update(r.key, { title: e.target.value })} onPaste={(e) => onPaste(e, i, 0)} onKeyDown={(e) => onKey(e, i, 0)} className={CELL} aria-label={`Row ${i + 1} title`} /></td>
+                <td className={TD}><TitleCell neet={neet} row={i} value={r.title} placeholder={i === 0 ? "e.g. Gym" : ""}
+                  onChange={(title) => update(r.key, { title })}
+                  onPick={(x) => update(r.key, { title: syllabusTitle(x), ...(r.notes.trim() ? {} : { notes: syllabusNote(x) }) })}
+                  onPaste={(e) => onPaste(e, i, 0)} onKeyDown={(e) => onKey(e, i, 0)} /></td>
                 <td className={TD}><input data-cell={`${i}-1`} value={r.notes} maxLength={2000} onChange={(e) => update(r.key, { notes: e.target.value })} onPaste={(e) => onPaste(e, i, 1)} onKeyDown={(e) => onKey(e, i, 1)} className={CELL} aria-label={`Row ${i + 1} notes`} /></td>
                 <td className={TD}>
                   <CellSelect dataCell={`${i}-2`} value={r.priority} display={PRIORITY_LABEL[r.priority]} groups={PRIORITY_GROUPS} onSelect={(v) => update(r.key, { priority: v as Priority })}
@@ -432,5 +437,89 @@ function TimeCell({ cell, value, disabled, onChange, onPaste, onKeyDown, onClock
         className={cn(CELL, "min-w-0 tabular-nums")} />
       <button type="button" onClick={onClock} aria-label={`${label}: open clock`} className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-muted"><ClockIcon className="h-4 w-4" /></button>
     </div>
+  );
+}
+
+/** Wraps the searched words in <mark>, as the Pacewise docs search does. */
+function Marked({ text, q }: { text: string; q: string }) {
+  const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!words.length) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));
+  return <>{parts.map((p, i) => (i % 2 ? <mark key={i} className="rounded bg-[#306fdb]/20 px-0.5 text-inherit">{p}</mark> : <span key={i}>{p}</span>))}</>;
+}
+
+/**
+ * A Title cell that is also a search of the NEET syllabus, all in the browser (no request): typing shows matching
+ * topics in a list below the cell; ↑ ↓ to move, Enter to pick, Esc to hide. Picking fills the title, and the notes
+ * if they are empty. The list floats above the sheet so the table never cuts it off.
+ */
+function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, onKeyDown }: {
+  neet: boolean;
+  row: number; value: string; placeholder: string; onChange: (v: string) => void; onPick: (x: SyllabusItem) => void;
+  onPaste: (e: React.ClipboardEvent) => void; onKeyDown: (e: React.KeyboardEvent) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+  const hits = useMemo(() => (open && neet ? searchSyllabus(value, 8) : []), [open, value, neet]);
+  const show = open && value.trim().length > 0 && hits.length > 0;
+  useEffect(() => setActive(-1), [value]);
+
+  const place = () => {
+    const r = input.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = Math.min(Math.max(r.width, 320), window.innerWidth - 24);
+    const left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
+    setPos(window.innerHeight - r.bottom < 300 && r.top > window.innerHeight - r.bottom ? { left, width, bottom: window.innerHeight - r.top + 4 } : { left, width, top: r.bottom + 4 });
+  };
+  useLayoutEffect(() => { if (show) place(); }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!show) return;
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (x: SyllabusItem) => { onPick(x); setOpen(false); input.current?.focus(); };
+
+  return (
+    <>
+      <input ref={input} data-cell={`${row}-0`} value={value} maxLength={120} placeholder={placeholder} autoComplete="off"
+        role="combobox" aria-expanded={show} aria-autocomplete="list" aria-label={`Row ${row + 1} title`}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onBlur={(e) => { if (!list.current?.contains(e.relatedTarget as Node)) setOpen(false); }}
+        onPaste={onPaste}
+        onKeyDown={(e) => {
+          if (show) {
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(hits.length - 1, a + 1)); return; }
+            if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); return; }
+            if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(hits[active]); return; }
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); return; }
+          }
+          onKeyDown(e);
+        }}
+        className={CELL} />
+      {show && pos && createPortal(
+        <ul ref={list} role="listbox" aria-label="NEET syllabus"
+          className="glass-in fixed z-[160] max-h-72 overflow-y-auto rounded-2xl border border-overlay/10 bg-canvas-raised p-1.5 shadow-themed"
+          style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}>
+          {hits.map((x, i) => (
+            <li key={syllabusKey(x)} role="option" aria-selected={i === active}>
+              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(x)} onMouseEnter={() => setActive(i)}
+                className={cn("flex w-full items-start gap-3 rounded-xl px-3.5 py-2.5 text-left", i === active && "bg-overlay/[0.06]")}>
+                <BookOpen className="mt-[3px] h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium leading-snug text-ink"><Marked text={x.topic ?? x.unit} q={value} /></span>
+                  <span className="mt-0.5 block text-xs text-ink-muted"><Marked text={syllabusPath(x)} q={value} /></span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>,
+        document.body,
+      )}
+    </>
   );
 }
