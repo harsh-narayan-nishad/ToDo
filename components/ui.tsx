@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 // Same look as the main app: pill buttons, underlined fields, soft raised cards.
 type Variant = "primary" | "ghost" | "outline" | "danger";
 const variants: Record<Variant, string> = {
-  primary: "bg-ink text-canvas hover:bg-ink/90",
-  ghost: "bg-transparent text-ink hover:bg-overlay/5",
-  outline: "bg-transparent border border-overlay/15 text-ink hover:border-overlay/30",
-  danger: "bg-accent-extreme/90 text-white hover:bg-accent-extreme",
+  primary: "bg-ink text-canvas",
+  ghost: "bg-transparent text-ink",
+  outline: "bg-transparent border border-overlay/15 text-ink",
+  danger: "bg-accent-extreme/90 text-white",
 };
 
 export function Button({ variant = "primary", size = "md", className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md" | "lg" }) {

@@ -24,7 +24,7 @@ export function PasswordInput({ className, ...props }: Props) {
         title={visible ? "Hide password" : "Show password"}
         // Keep focus (and the caret) in the input when toggling.
         onMouseDown={(e) => e.preventDefault()}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-medium"
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-ink-muted transition-colors  focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-medium"
       >
         {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>

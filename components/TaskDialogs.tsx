@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button, FIELD, LABEL } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { addMinutesToTime, clock, dayLabel, duration, today } from "@/lib/days";
@@ -7,10 +8,122 @@ import { earliestStart, loggableDays, logProblem, nowLocal, planProblem, titlePr
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 
-/** "All day" switch plus start / end time. With a time, the task sits in that slot in the Pacewise calendar. */
-export function TimeFields({ allDay, setAllDay, startTime, setStartTime, endTime, setEndTime, disabled }: {
-  allDay: boolean; setAllDay: (v: boolean) => void; startTime: string; setStartTime: (v: string) => void; endTime: string; setEndTime: (v: string) => void; disabled?: boolean;
+const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const DAY = 24 * 60;
+
+/**
+ * Analog clock time picker. One dial, one gesture: drag the hand round (or tap anywhere on the face) and the hour
+ * and minutes are set together, in 5-minute steps — a full turn of the hour hand is 12 hours, so the minute hand
+ * follows on its own. AM / PM picks the half of the day; arrow keys move 5 minutes.
+ */
+export function AnalogClock({ value, onChange, from, label }: { value: string; onChange: (v: string) => void; from?: string; label: string }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  /** Which hand is being moved: grabbed near the minute hand's tip → minutes, anywhere else → the hour hand. */
+  const dragging = useRef<"hour" | "minute" | null>(null);
+  const total = toMin(value || "09:00");
+  const latest = useRef(total);
+  latest.current = total;
+  const pm = total >= 720;
+  const hourAngle = ((total % 720) / 720) * 360;
+  const minuteAngle = ((total % 60) / 60) * 360;
+  const span = from ? total - toMin(from) : 0;
+
+  /** Pointer position in the dial's own 200 × 200 units, centred on 0, 0. */
+  function point(e: React.PointerEvent) {
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const x = ((e.clientX - box.left) / box.width) * 200 - 100;
+    const y = ((e.clientY - box.top) / box.height) * 200 - 100;
+    return { x, y, r: Math.hypot(x, y), angle: ((Math.atan2(x, -y) * 180) / Math.PI + 360) % 360 };
+  }
+  function grab(e: React.PointerEvent) {
+    const p = point(e);
+    if (!p) return;
+    const tip = at(((latest.current % 60) / 60) * 360, 74);
+    dragging.current = Math.hypot(p.x + 100 - tip.x, p.y + 100 - tip.y) < 22 ? "minute" : "hour";
+    move(e);
+  }
+  function move(e: React.PointerEvent) {
+    const p = point(e);
+    if (!p || p.r < 12 || !dragging.current) return; // the very centre has no direction
+    const now = latest.current;
+    let next: number;
+    if (dragging.current === "minute") {
+      // the minute hand: 1-minute steps, the hour stays; going past 12 carries the hour on (or back), like a real clock
+      const mins = Math.round(p.angle / 6) % 60;
+      const prev = now % 60;
+      let hour = Math.floor(now / 60);
+      if (prev >= 45 && mins < 15) hour += 1;
+      else if (prev < 15 && mins >= 45) hour -= 1;
+      next = (((hour * 60 + mins) % DAY) + DAY) % DAY;
+    } else {
+      const step = Math.round((p.angle / 360) * 144) % 144; // 144 five-minute steps in 12 hours
+      next = (now >= 720 ? 720 : 0) + step * 5;
+    }
+    if (next !== now) { latest.current = next; onChange(toTime(next)); }
+  }
+  function onKey(e: React.KeyboardEvent) {
+    const d = e.key === "ArrowUp" || e.key === "ArrowRight" ? 5 : e.key === "ArrowDown" || e.key === "ArrowLeft" ? -5 : 0;
+    if (!d) return;
+    e.preventDefault();
+    onChange(toTime((total + d + DAY) % DAY));
+  }
+  function at(deg: number, r: number) { return { x: 100 + r * Math.sin((deg * Math.PI) / 180), y: 100 - r * Math.cos((deg * Math.PI) / 180) }; }
+  const hourTip = at(hourAngle, 50);
+  const minuteTip = at(minuteAngle, 74);
+
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-3xl border border-overlay/10 bg-overlay/5 px-4 py-5">
+      <div className="flex w-full items-center justify-between gap-3">
+        <div>
+          <p className="font-display text-3xl tabular-nums text-ink">{clock(toTime(total))}</p>
+          <p className="text-xs text-ink-faint">{from ? (span > 0 ? `Lasts ${duration(span)}` : "Ends next day or before start") : "Drag either hand or tap the clock"}</p>
+        </div>
+        <div className="flex rounded-full border border-overlay/15 p-0.5 text-xs" role="group" aria-label="Half of the day">
+          {(["AM", "PM"] as const).map((h) => {
+            const on = (h === "PM") === pm;
+            return (
+              <button key={h} type="button" aria-pressed={on} onClick={() => !on && onChange(toTime((total + 720) % DAY))}
+                className={cn("rounded-full px-3 py-1 transition-colors", on ? "bg-ink text-canvas" : "text-ink-muted ")}>{h}</button>
+            );
+          })}
+        </div>
+      </div>
+      <svg ref={svgRef} viewBox="0 0 200 200" className="h-56 w-56 cursor-pointer touch-none select-none outline-none focus-visible:rounded-full focus-visible:ring-2 focus-visible:ring-accent-medium"
+        role="slider" tabIndex={0} aria-label={label} aria-valuemin={0} aria-valuemax={DAY - 5} aria-valuenow={total} aria-valuetext={clock(toTime(total))}
+        onKeyDown={onKey}
+        onPointerDown={(e) => { (e.currentTarget as Element).setPointerCapture(e.pointerId); grab(e); }}
+        onPointerMove={move}
+        onPointerUp={() => { dragging.current = null; }}
+        onPointerCancel={() => { dragging.current = null; }}>
+        <circle cx="100" cy="100" r="96" className="fill-canvas stroke-overlay/15" strokeWidth="1" />
+        {Array.from({ length: 60 }, (_, i) => {
+          const major = i % 5 === 0;
+          const o = at(i * 6, 92);
+          const n = at(i * 6, major ? 84 : 88);
+          return <line key={i} x1={o.x} y1={o.y} x2={n.x} y2={n.y} strokeLinecap="round" strokeWidth={major ? 2 : 1} className={major ? "stroke-ink/70" : "stroke-ink/25"} />;
+        })}
+        {Array.from({ length: 12 }, (_, i) => {
+          const h = i === 0 ? 12 : i;
+          const p = at(i * 30, 70);
+          return <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" className="fill-ink-muted text-[13px]">{h}</text>;
+        })}
+        <line x1="100" y1="100" x2={minuteTip.x} y2={minuteTip.y} strokeLinecap="round" strokeWidth="2" className="stroke-ink/60" />
+        <circle cx={minuteTip.x} cy={minuteTip.y} r="5.5" className="fill-ink" />
+        <line x1="100" y1="100" x2={hourTip.x} y2={hourTip.y} strokeLinecap="round" strokeWidth="4.5" className="stroke-ink" />
+        <circle cx={hourTip.x} cy={hourTip.y} r="7" className="fill-accent-medium" />
+        <circle cx="100" cy="100" r="4" className="fill-ink" />
+      </svg>
+    </div>
+  );
+}
+
+/** "All day" switch plus start / end time. With a time, the task sits in that slot in the Pacewise calendar. `clock` = one-tap time lists instead of typed times. */
+export function TimeFields({ allDay, setAllDay, startTime, setStartTime, endTime, setEndTime, disabled, clock: useClock }: {
+  allDay: boolean; setAllDay: (v: boolean) => void; startTime: string; setStartTime: (v: string) => void; endTime: string; setEndTime: (v: string) => void; disabled?: boolean; clock?: boolean;
 }) {
+  if (useClock) return <ClockTimeFields {...{ allDay, setAllDay, startTime, setStartTime, endTime, setEndTime, disabled }} />;
   return (
     <div className="grid grid-cols-1 items-end gap-5 sm:grid-cols-3">
       <label className="flex items-center gap-2 pb-2 text-sm text-ink-muted">
@@ -91,6 +204,39 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** TimeFields with the analog clock: From and To show the time, and the picked one opens the clock below them. */
+function ClockTimeFields({ allDay, setAllDay, startTime, setStartTime, endTime, setEndTime, disabled }: {
+  allDay: boolean; setAllDay: (v: boolean) => void; startTime: string; setStartTime: (v: string) => void; endTime: string; setEndTime: (v: string) => void; disabled?: boolean;
+}) {
+  const [open, setOpen] = useState<"from" | "to" | null>(null);
+  const field = (which: "from" | "to", label: string, value: string) => (
+    <div className={LABEL}>
+      <span>{label}</span>
+      <button type="button" disabled={disabled} onClick={() => setOpen((o) => (o === which ? null : which))} aria-expanded={open === which}
+        className={cn(FIELD, "flex items-center justify-between text-left disabled:opacity-40", open === which && "border-accent-medium")}>
+        <span className="tabular-nums">{clock(value)}</span>
+        <ChevronDown className={cn("h-4 w-4 text-ink-muted transition-transform", open === which && "rotate-180")} aria-hidden />
+      </button>
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-3">
+        <label className="flex items-center gap-2 pt-7 text-sm text-ink-muted">
+          <input type="checkbox" checked={allDay} disabled={disabled} onChange={(e) => { setAllDay(e.target.checked); setOpen(null); }} className="h-4 w-4 accent-[#7FC97F]" />
+          All day
+        </label>
+        {!allDay && field("from", "From", startTime)}
+        {!allDay && field("to", "To", endTime)}
+      </div>
+      {!allDay && open === "from" && (
+        <AnalogClock label="Start time" value={startTime} onChange={(v) => { setStartTime(v); if (!endTime || endTime <= v) setEndTime(addMinutesToTime(v, 60)); }} />
+      )}
+      {!allDay && open === "to" && <AnalogClock label="End time" value={endTime} from={startTime} onChange={setEndTime} />}
+    </div>
   );
 }
 

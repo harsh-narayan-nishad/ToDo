@@ -46,10 +46,10 @@ export function duration(minutes: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
-/** "14:30" → "2:30 PM" (or "14:30", following the browser's locale). */
+/** "14:30" → "2:30 PM". Always 12-hour, whatever the browser's locale. */
 export function clock(time: string): string {
   const [h, m] = time.split(":").map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 /** "14:30" plus 90 min → "16:00" (stops at 23:59). */

@@ -83,7 +83,7 @@ export function TodoApp() {
         <div ref={menuRef} className="relative flex items-center justify-between">
           <Logo />
           <button onClick={() => setMenuOpen((o) => !o)} aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="account-menu"
-            className="p-2 text-ink-muted transition-colors hover:bg-overlay/5 hover:text-ink md:hidden">
+            className="p-2 text-ink-muted transition-colors   md:hidden">
             {menuOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
           </button>
           {menuOpen && (
@@ -93,8 +93,8 @@ export function TodoApp() {
                 <p className="truncate text-xs text-ink-faint">@{user.username}</p>
               </div>
               <div className="flex flex-col gap-3 border-t border-overlay/10 pt-3">
-                <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left hover:text-ink">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
-                <button onClick={() => { setMenuOpen(false); void signOut(); }} className="flex items-center gap-2 text-left hover:text-ink"><LogOut className="h-4 w-4" /> Sign out</button>
+                <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left ">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
+                <button onClick={() => { setMenuOpen(false); void signOut(); }} className="flex items-center gap-2 text-left "><LogOut className="h-4 w-4" /> Sign out</button>
               </div>
             </div>
           )}
@@ -102,21 +102,21 @@ export function TodoApp() {
         <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Sections">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
-              className={cn("flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm transition-colors", tab === id ? "bg-ink text-canvas" : "text-ink-muted hover:bg-overlay/5 hover:text-ink")}>
+              className={cn("flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm transition-colors", tab === id ? "bg-ink text-canvas" : "text-ink-muted  ")}>
               <Icon className="h-4 w-4" aria-hidden />
               {label}
             </button>
           ))}
-          <a href={PACEWISE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-overlay/5 hover:text-ink">
+          <a href={PACEWISE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm text-ink-muted transition-colors  ">
             <CalendarDays className="h-4 w-4" aria-hidden /> Pacewise calendar
           </a>
         </nav>
         <div className="mt-auto hidden flex-col gap-3 text-sm text-ink-muted md:flex">
-          <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left hover:text-ink">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
+          <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left ">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
           <div className="border-t border-overlay/10 pt-3">
             <p className="truncate text-ink">{user.name}</p>
             <p className="truncate text-xs text-ink-faint">@{user.username}</p>
-            <button onClick={() => void signOut()} className="mt-2 flex items-center gap-2 hover:text-ink"><LogOut className="h-4 w-4" /> Sign out</button>
+            <button onClick={() => void signOut()} className="mt-2 flex items-center gap-2 "><LogOut className="h-4 w-4" /> Sign out</button>
           </div>
         </div>
       </aside>

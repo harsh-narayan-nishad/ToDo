@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { Check, Clock, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
 import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
@@ -75,7 +75,7 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
       ))}
 
       <AddButton onClick={() => setAdding(true)} />
-      {adding && <NewTaskSheet onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
+      {adding && <NewTaskSheet tasks={tasks ?? []} onClose={() => setAdding(false)} onCreated={(t) => { setTasks((list) => [t, ...(list ?? [])]); onChanged(); }} />}
 
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
       {logging && (
@@ -106,7 +106,7 @@ function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; o
   return (
     <li className="flex items-start gap-4 px-4 py-4 sm:px-5">
       <button onClick={onToggle} disabled={!!locked} title={locked ?? undefined} aria-label={done ? "Mark as not done" : "Mark as done"}
-        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-60", done ? "border-accent-medium bg-accent-medium text-canvas" : "border-overlay/30", !done && !locked && "hover:border-accent-medium")}>
+        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-60", done ? "border-accent-medium bg-accent-medium text-canvas" : "border-overlay/30")}>
         {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
       </button>
       <div className="min-w-0 flex-1">
@@ -123,7 +123,7 @@ function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; o
       {!locked && <div className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="h-4 w-4" /></Button>
-        <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete" className="hover:text-accent-extreme"><Trash2 className="h-4 w-4" /></Button>
+        <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>
       </div>}
     </li>
   );
@@ -140,8 +140,20 @@ function AddButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** A pill button in liquid glass, for the New task panel. `strong` = the main action (bolder, lightly tinted). */
+function GlassButton({ strong, className, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { strong?: boolean }) {
+  return (
+    <button {...props}
+      className={cn("glass-fab relative inline-flex h-11 items-center justify-center gap-2 rounded-full px-6 text-sm text-ink disabled:pointer-events-none disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium", strong && "font-semibold", className)}>
+      <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={22} blur={4} /></span>
+      {strong && <span className="absolute inset-0 rounded-full bg-overlay/10" aria-hidden />}
+      <span className="relative inline-flex items-center gap-2">{children}</span>
+    </button>
+  );
+}
+
 /** New task, in a liquid glass panel: title, notes, priority, days and time. */
-function NewTaskSheet({ onClose, onCreated }: { onClose: () => void; onCreated: (t: Task) => void }) {
+function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: () => void; onCreated: (t: Task) => void }) {
   const now = today();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -154,6 +166,34 @@ function NewTaskSheet({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+
+  /** Tasks added before, newest first, one per title: matching what is typed, or the most recent while the title is empty. */
+  const suggestions = useMemo(() => {
+    const q = title.trim().toLowerCase();
+    const seen = new Set<string>();
+    const out: Task[] = [];
+    for (const t of [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+      const key = t.title.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (key === q || (q && !key.includes(q))) continue;
+      out.push(t);
+      if (out.length === 5) break;
+    }
+    return out;
+  }, [tasks, title]);
+  const openTwin = tasks.find((t) => t.status === "open" && t.title.trim().toLowerCase() === title.trim().toLowerCase() && title.trim());
+
+  /** Fill the form from a task added before (title, notes, priority and time; the days stay as picked). */
+  function applySuggestion(t: Task) {
+    setTitle(t.title);
+    setNotes(t.notes);
+    setPriority(t.priority);
+    setAllDay(!t.startTime);
+    if (t.startTime && t.endTime) { setStartTime(t.startTime); setEndTime(t.endTime); }
+    setError(null);
+    titleRef.current?.focus();
+  }
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -179,18 +219,33 @@ function NewTaskSheet({ onClose, onCreated }: { onClose: () => void; onCreated: 
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-3 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="New task"
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-canvas/70 p-3 backdrop-blur-[48px] backdrop-saturate-150 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="New task"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="glass-in relative w-full max-w-lg">
         <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
         <form onSubmit={(e) => void submit(e)} className="relative flex max-h-[85dvh] flex-col gap-5 overflow-y-auto p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-display text-2xl">New task</h2>
-            <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition-colors hover:bg-overlay/10 hover:text-ink"><X className="h-5 w-5" /></button>
+            <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition-colors  "><X className="h-5 w-5" /></button>
           </div>
           <label className={LABEL}>Title
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?" maxLength={120} className={FIELD} />
           </label>
+          {openTwin && <p className="-mt-3 text-xs text-accent-fast">This task is already in your list and still open.</p>}
+          {suggestions.length > 0 && (
+            <div className="-mt-2">
+              <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-faint"><Sparkles className="h-3.5 w-3.5" aria-hidden />{title.trim() ? "Added before" : "Recent tasks"}</p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((t) => (
+                  <button key={t.id} type="button" onClick={() => applySuggestion(t)} title={t.notes || t.title}
+                    className="inline-flex max-w-full items-center gap-2 rounded-full border border-overlay/15 bg-overlay/5 px-3.5 py-1.5 text-sm text-ink transition-colors  ">
+                    <span className="truncate">{t.title}</span>
+                    {t.status === "open" ? <span className="shrink-0 text-xs text-accent-fast">open</span> : <span className="shrink-0 text-xs text-ink-faint">done</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <label className={LABEL}>Notes (optional)
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Details, links, steps…" className={cn(FIELD, "resize-none")} />
           </label>
@@ -203,11 +258,11 @@ function NewTaskSheet({ onClose, onCreated }: { onClose: () => void; onCreated: 
             <label className={LABEL}>Start<input type="date" value={startDay} min={earliestStart(now)} onChange={(e) => { setStartDay(e.target.value); if (e.target.value > dueDay) setDueDay(e.target.value); }} className={FIELD} /></label>
             <label className={LABEL}>Due<input type="date" value={dueDay} min={startDay > now ? startDay : now} onChange={(e) => setDueDay(e.target.value)} className={FIELD} /></label>
           </div>
-          <TimeFields allDay={allDay} setAllDay={setAllDay} startTime={startTime} setStartTime={setStartTime} endTime={endTime} setEndTime={setEndTime} />
+          <TimeFields clock allDay={allDay} setAllDay={setAllDay} startTime={startTime} setStartTime={setStartTime} endTime={endTime} setEndTime={setEndTime} />
           {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={busy} className="rounded-full">Cancel</Button>
-            <Button type="submit" disabled={busy || !title.trim()} className="rounded-full"><Plus className="h-4 w-4" />{busy ? "Adding…" : "Add task"}</Button>
+            <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
+            <GlassButton type="submit" disabled={busy || !title.trim()} strong><Plus className="h-4 w-4" />{busy ? "Adding…" : "Add task"}</GlassButton>
           </div>
         </form>
       </div>

@@ -70,7 +70,7 @@ export function HistoryPanel({ day, setDay, version, onChanged }: { day: string;
                       {l.startTime && <span className="ml-2 text-sm text-ink-faint">{clock(l.startTime)} – {clock(addMinutesToTime(l.startTime, l.minutes))}</span>}
                       {l.note && <span className="block text-sm text-ink-muted">{l.note}</span>}
                     </span>
-                    {l.day === now && <Button size="sm" variant="ghost" aria-label="Remove entry" onClick={() => void removeLog(l.id)} className="hover:text-accent-extreme"><Trash2 className="h-4 w-4" /></Button>}
+                    {l.day === now && <Button size="sm" variant="ghost" aria-label="Remove entry" onClick={() => void removeLog(l.id)}><Trash2 className="h-4 w-4" /></Button>}
                   </li>
                 ))}
               </ul>
@@ -84,7 +84,7 @@ export function HistoryPanel({ day, setDay, version, onChanged }: { day: string;
         {recent && byDay.length === 0 && <Empty>No time logged in the last 30 days.</Empty>}
         <div className="flex flex-col gap-3">
           {byDay.map(([d, logs]) => (
-            <button key={d} onClick={() => setDay(d)} className="flex flex-col gap-1 border border-overlay/10 bg-canvas-raised px-4 py-3 text-left transition-colors hover:border-overlay/30">
+            <button key={d} onClick={() => setDay(d)} className="flex flex-col gap-1 border border-overlay/10 bg-canvas-raised px-4 py-3 text-left transition-colors ">
               <span className="flex items-center justify-between gap-3">
                 <span className="text-ink">{dayLabel(d, now)}</span>
                 <span className="font-mono text-sm text-accent-medium">{duration(logs.reduce((a, l) => a + l.minutes, 0))}</span>

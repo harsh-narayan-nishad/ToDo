@@ -5,7 +5,7 @@ import { Apple } from "lucide-react";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const SCRIPT_SRC = "https://accounts.google.com/gsi/client";
-const BTN = "flex h-12 w-full items-center justify-center gap-3 rounded-none border border-overlay/15 bg-white text-base font-medium text-[#1f1f1f] transition-colors hover:bg-[#f4f4f4] disabled:opacity-60";
+const BTN = "flex h-12 w-full items-center justify-center gap-3 rounded-none border border-overlay/15 bg-white text-base font-medium text-[#1f1f1f] transition-colors  disabled:opacity-60";
 
 interface GoogleId {
   initialize: (o: { client_id: string; callback: (r: { credential?: string }) => void }) => void;
