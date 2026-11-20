@@ -1,6 +1,6 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, History, ListChecks, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CalendarDays, History, ListChecks, LogOut, Menu, Moon, Sun, UserRound, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
@@ -60,6 +60,17 @@ export function TodoApp() {
     window.addEventListener("focus", onVisible);
     return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
   }, []);
+  /** Phone/tablet only: theme and sign-in details live behind the hamburger button. */
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [menuOpen]);
   const openDay = useCallback((day: string) => { setHistoryDay(day); setTab("history"); }, []);
 
   if (checking) return <div className="min-h-screen" />;
@@ -68,7 +79,25 @@ export function TodoApp() {
   return (
     <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
       <aside className="flex shrink-0 flex-col gap-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
-        <Logo />
+        <div ref={menuRef} className="relative flex items-center justify-between">
+          <Logo />
+          <button onClick={() => setMenuOpen((o) => !o)} aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} aria-controls="account-menu"
+            className="p-2 text-ink-muted transition-colors hover:bg-overlay/5 hover:text-ink md:hidden">
+            {menuOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+          </button>
+          {menuOpen && (
+            <div id="account-menu" className="absolute right-0 top-full z-50 mt-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col gap-3 border border-overlay/10 bg-canvas-raised p-4 text-sm text-ink-muted shadow-themed md:hidden">
+              <div>
+                <p className="truncate text-ink">{user.name}</p>
+                <p className="truncate text-xs text-ink-faint">@{user.username}</p>
+              </div>
+              <div className="flex flex-col gap-3 border-t border-overlay/10 pt-3">
+                <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left hover:text-ink">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
+                <button onClick={() => { setMenuOpen(false); void signOut(); }} className="flex items-center gap-2 text-left hover:text-ink"><LogOut className="h-4 w-4" /> Sign out</button>
+              </div>
+            </div>
+          )}
+        </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Sections">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
@@ -81,7 +110,7 @@ export function TodoApp() {
             <CalendarDays className="h-4 w-4" aria-hidden /> Pacewise calendar
           </a>
         </nav>
-        <div className="mt-auto flex flex-col gap-3 text-sm text-ink-muted">
+        <div className="mt-auto hidden flex-col gap-3 text-sm text-ink-muted md:flex">
           <button onClick={() => setLight(!light)} className="flex items-center gap-2 text-left hover:text-ink">{light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} {light ? "Dark" : "Light"} theme</button>
           <div className="border-t border-overlay/10 pt-3">
             <p className="truncate text-ink">{user.name}</p>
