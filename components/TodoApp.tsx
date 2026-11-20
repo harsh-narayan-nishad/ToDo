@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { NotificationBell } from "@/components/NotificationBell";
 import { WheelSpinner } from "@/components/WheelSpinner";
 import { LoginCard } from "@/components/LoginCard";
 import { TasksPanel } from "@/components/TasksPanel";
@@ -80,7 +81,11 @@ export function TodoApp() {
         <div className="relative flex items-center justify-between">
           <Logo />
           {/* The Pacewise-style hamburger menu: History, theme, and the account with Log out. */}
-          <HamburgerMenu user={user} light={light} setLight={setLight} onHistory={() => setTab("history")} onSignOut={() => void signOut()} />
+          <div className="flex items-center gap-2">
+            {/* Missed tasks, today's tasks and habit status. */}
+            <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
+            <HamburgerMenu user={user} light={light} setLight={setLight} onHistory={() => setTab("history")} onSignOut={() => void signOut()} />
+          </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Sections">
           {TABS.map(({ id, label, icon: Icon }) => (
