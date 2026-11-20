@@ -321,8 +321,8 @@ export function HabitDetail({ habit: h, byDay, onClose, onEdit, onArchive, onDel
       const d = addDays(now, -i);
       const e = byDay?.get(d);
       const planned = isPlanned(h, d);
-      const label = e ? (h.kind === "count" ? `${e.value} ${h.unit}`.trim() : h.kind === "duration" || h.kind === "sleep" ? minutesLabel(e.value) : "done") : planned ? "missed" : "not planned";
-      out.push({ day: d, level: levelOf(progress(h, e)), off: !planned && !e, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}` });
+      const label = e?.skipped ? "skipped" : e ? (h.kind === "count" ? `${e.value} ${h.unit}`.trim() : h.kind === "duration" || h.kind === "sleep" ? minutesLabel(e.value) : "done") : planned ? "missed" : "not planned";
+      out.push({ day: d, level: levelOf(progress(h, e)), off: (!planned && !e) || !!e?.skipped, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}` });
     }
     return out;
   }, [h, byDay, now]);
@@ -360,7 +360,7 @@ export function HabitDetail({ habit: h, byDay, onClose, onEdit, onArchive, onDel
               <li key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span className="text-ink">{dayLabel(e.day, now)}</span>
                 <span className="min-w-0 truncate text-right text-ink-muted">
-                  {h.kind === "sleep" && e.bedTime && e.wakeTime ? `${minutesLabel(e.value)} · ${clock(e.bedTime)} – ${clock(e.wakeTime)}${e.quality ? ` · ${QUALITY[e.quality - 1]}` : ""}`
+                  {e.skipped ? "Skipped" : h.kind === "sleep" && e.bedTime && e.wakeTime ? `${minutesLabel(e.value)} · ${clock(e.bedTime)} – ${clock(e.wakeTime)}${e.quality ? ` · ${QUALITY[e.quality - 1]}` : ""}`
                     : h.kind === "count" ? `${e.value.toLocaleString()}${h.unit ? ` ${h.unit}` : ""} of ${h.target.toLocaleString()}`
                     : h.kind === "duration" ? `${minutesLabel(e.value)} of ${minutesLabel(h.target)}`
                     : h.kind === "quit" ? "Avoided" : "Done"}

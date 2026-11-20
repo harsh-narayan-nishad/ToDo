@@ -28,7 +28,7 @@ export interface Habit {
   archived: boolean;
   createdAt: string;
 }
-export interface HabitEntry { id: string; habitId: string; day: string; value: number; bedTime: string | null; wakeTime: string | null; quality: number | null; note: string }
+export interface HabitEntry { id: string; habitId: string; day: string; value: number; bedTime: string | null; wakeTime: string | null; quality: number | null; note: string; skipped?: boolean }
 export interface HabitInput { name: string; kind: HabitKind; scale: HabitScale; category: HabitCategory; target: number; unit: string; days: number[]; cue: string }
 
 export const KINDS: { id: HabitKind; label: string; hint: string }[] = [
@@ -97,7 +97,7 @@ export const habitApi = {
   remove: (id: string) => api<void>(`/todo/habits/${enc(id)}`, { method: "DELETE" }),
   entries: (from: string, to: string) => api<HabitEntry[]>("/todo/habits/entries", { query: { from, to } }),
   /** Returns null when a count / time of 0 removed the entry. */
-  set: (id: string, day: string, body: { value?: number; bedTime?: string; wakeTime?: string; quality?: number | null; note?: string }) =>
+  set: (id: string, day: string, body: { skip?: boolean; value?: number; bedTime?: string; wakeTime?: string; quality?: number | null; note?: string }) =>
     api<HabitEntry | undefined>(`/todo/habits/${enc(id)}/entries/${day}`, { method: "POST", body: { ...body, ...stamp() } }).then((e) => e ?? null),
   clear: (id: string, day: string) => api<void>(`/todo/habits/${enc(id)}/entries/${day}`, { method: "DELETE", query: stamp() }),
 };
@@ -106,10 +106,22 @@ export const habitApi = {
 
 /** check / quit are done with any entry; the others when the goal is reached. */
 export const goal = (h: Habit) => (h.kind === "check" || h.kind === "quit" ? 1 : h.target);
-export const progress = (h: Habit, e?: HabitEntry | null) => (e ? Math.min(1, e.value / goal(h)) : 0);
-export const isDone = (h: Habit, e?: HabitEntry | null) => !!e && e.value >= goal(h);
+export const progress = (h: Habit, e?: HabitEntry | null) => (e && !e.skipped ? Math.min(1, e.value / goal(h)) : 0);
+export const isDone = (h: Habit, e?: HabitEntry | null) => !!e && !e.skipped && e.value >= goal(h);
+/** Skipped on purpose: neither done nor missed (streaks and scores pass over it). */
+export const isSkipped = (e?: HabitEntry | null) => !!e?.skipped;
+export type HabitStatus = "completed" | "skipped" | "in-progress" | "pending";
+/** Today's status of a habit, like a task's: completed, skipped, in progress (part of a count or time) or still to do. */
+export function habitStatus(h: Habit, e?: HabitEntry | null): HabitStatus {
+  if (isSkipped(e)) return "skipped";
+  if (isDone(h, e)) return "completed";
+  return progress(h, e) > 0 ? "in-progress" : "pending";
+}
+export const STATUS_LABEL: Record<HabitStatus, string> = { completed: "Completed", skipped: "Skipped", "in-progress": "In progress", pending: "To do" };
 /** Planned for this day: one of its weekdays, and not before it was added. */
 export const isPlanned = (h: Habit, day: string) => day >= h.startDay && h.days.includes(weekday(day));
+/** Planned for this day and not skipped: what "x of y done" counts. */
+export const isDue = (h: Habit, day: string, e?: HabitEntry | null) => isPlanned(h, day) && !isSkipped(e);
 
 /** entries → habitId → day → entry. */
 export type EntryIndex = Map<string, Map<string, HabitEntry>>;
@@ -130,7 +142,7 @@ export function indexEntries(entries: HabitEntry[]): EntryIndex {
 export function currentStreak(h: Habit, byDay: Map<string, HabitEntry> | undefined, now = today()): number {
   let n = 0;
   for (let d = now; d >= h.startDay; d = addDays(d, -1)) {
-    if (!isPlanned(h, d)) continue;
+    if (!isPlanned(h, d) || isSkipped(byDay?.get(d))) continue;
     if (isDone(h, byDay?.get(d))) n++;
     else if (d !== now) break;
   }
@@ -141,7 +153,7 @@ export function bestStreak(h: Habit, byDay: Map<string, HabitEntry> | undefined,
   let best = 0;
   let run = 0;
   for (let d = h.startDay; d <= now; d = addDays(d, 1)) {
-    if (!isPlanned(h, d)) continue;
+    if (!isPlanned(h, d) || isSkipped(byDay?.get(d))) continue;
     if (isDone(h, byDay?.get(d))) best = Math.max(best, ++run);
     else if (d !== now) run = 0;
   }
@@ -154,7 +166,7 @@ export function successRate(h: Habit, byDay: Map<string, HabitEntry> | undefined
   let done = 0;
   const from = addDays(now, -(n - 1));
   for (let d = from > h.startDay ? from : h.startDay; d <= now; d = addDays(d, 1)) {
-    if (!isPlanned(h, d)) continue;
+    if (!isPlanned(h, d) || isSkipped(byDay?.get(d))) continue;
     const ok = isDone(h, byDay?.get(d));
     if (d === now && !ok) continue;
     planned++;

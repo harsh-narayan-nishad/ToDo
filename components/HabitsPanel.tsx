@@ -1,14 +1,15 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BedDouble, Check, ChevronDown, Flame, Minus, Moon, Plus, Sunrise } from "lucide-react";
-import { Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
+import { BedDouble, Check, ChevronDown, Flame, Minus, Moon, Plus, SkipForward, Sunrise, Undo2 } from "lucide-react";
+import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
+import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
 import { HabitDetail, HabitEditor, HabitGrid, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
 import { ApiError } from "@/lib/api";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
-  TEMPLATES, averageClock, currentStreak, daysLabel, goal, goalLabel, habitApi, indexEntries, isDone, isPlanned, kindLabel, minutesLabel, progress, successRate,
+  TEMPLATES, averageClock, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
   type EntryIndex, type Habit, type HabitEntry, type HabitInput, type HabitScale,
 } from "@/lib/habits";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,18 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
     } catch (e) { fail(e); }
   }
 
+  /** Skip today on purpose (neither done nor missed), or undo the skip. */
+  async function skip(h: Habit, on: boolean) {
+    const p = pending.current.get(h.id);
+    if (p) { clearTimeout(p.timer); pending.current.delete(h.id); }
+    putToday(h.id, on ? { id: "local", habitId: h.id, day: now, value: 0, bedTime: null, wakeTime: null, quality: null, note: "", skipped: true } : null);
+    try {
+      if (on) putToday(h.id, await habitApi.set(h.id, now, { skip: true }));
+      else await habitApi.clear(h.id, now);
+      setError(null);
+    } catch (e) { fail(e); }
+  }
+
   /** Counts and minutes change quickly (+, +, +), so the value shows at once and is saved after a short pause. */
   const pending = useRef(new Map<string, { value: number; timer: ReturnType<typeof setTimeout> }>());
   const flush = useCallback(async (habitId: string, value: number) => {
@@ -126,7 +139,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   const detail = (habits ?? []).find((h) => h.id === detailId) ?? null;
 
   // ---- summary ----
-  const plannedToday = active.filter((h) => isPlanned(h, now));
+  const plannedToday = active.filter((h) => isDue(h, now, index.get(h.id)?.get(now)));
   const doneToday = plannedToday.filter((h) => isDone(h, index.get(h.id)?.get(now))).length;
   const rates = active.map((h) => successRate(h, index.get(h.id), 30, now)).filter((r): r is number => r !== null);
   const score = rates.length ? Math.round((rates.reduce((a, r) => a + r, 0) / rates.length) * 100) : null;
@@ -137,7 +150,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
     let n = 0;
     for (let i = 0; i < HISTORY_DAYS; i++) {
       const d = addDays(now, -i);
-      const planned = active.filter((h) => isPlanned(h, d));
+      const planned = active.filter((h) => isDue(h, d, index.get(h.id)?.get(d)));
       if (!planned.length) { if (active.some((h) => h.startDay <= d)) continue; break; }
       const ok = planned.every((h) => isDone(h, index.get(h.id)?.get(d)));
       if (ok) n++; else if (i > 0) break;
@@ -150,7 +163,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
     const out = [];
     for (let i = 181; i >= 0; i--) {
       const d = addDays(now, -i);
-      const planned = active.filter((h) => isPlanned(h, d));
+      const planned = active.filter((h) => isDue(h, d, index.get(h.id)?.get(d)));
       const done = planned.filter((h) => isDone(h, index.get(h.id)?.get(d))).length;
       out.push({ day: d, level: planned.length ? levelOf(done / planned.length) : 0, off: !planned.length, title: `${longDay(d)}: ${planned.length ? `${done} of ${planned.length} habits` : "no habits planned"}` });
     }
@@ -196,11 +209,12 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
                 const list = todayList.filter((h) => h.scale === g.id);
                 if (!list.length) return null;
                 const done = list.filter((h) => isDone(h, index.get(h.id)?.get(now))).length;
+                const due = list.filter((h) => !isSkipped(index.get(h.id)?.get(now))).length;
                 return (
                   <div key={g.id}>
-                    <h3 className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-ink-muted"><span>{g.title}</span><span className="normal-case tracking-normal text-ink-faint">{done} of {list.length}</span></h3>
+                    <h3 className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-ink-muted"><span>{g.title}</span><span className="normal-case tracking-normal text-ink-faint">{done} of {due}{due < list.length ? ` · ${list.length - due} skipped` : ""}</span></h3>
                     <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-                      {list.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onOpen={() => setDetailId(h.id)} />)}
+                      {list.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
                     </ul>
                   </div>
                 );
@@ -209,7 +223,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
                 <div>
                   <h3 className="mb-2 text-sm uppercase tracking-wide text-ink-muted">Not planned today</h3>
                   <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-                    {restList.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onOpen={() => setDetailId(h.id)} />)}
+                    {restList.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
                   </ul>
                 </div>
               )}
@@ -273,11 +287,13 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 const sleepPreset = (): Partial<HabitInput> => TEMPLATES.find((t) => t.kind === "sleep")!;
 
 /** One habit for today: its control (tick, or − amount +), name and plan, streak, and the last 7 days. */
-export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onOpen }: {
-  habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onOpen: () => void;
+export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen }: {
+  habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onSkip: (on: boolean) => void; onOpen: () => void;
 }) {
   const e = byDay?.get(now);
   const done = isDone(h, e);
+  const skipped = isSkipped(e);
+  const status = habitStatus(h, e);
   const streak = currentStreak(h, byDay, now);
   const amount = h.kind === "count" || h.kind === "duration";
   const step = h.kind === "duration" ? (h.target >= 60 ? 15 : 5) : Math.max(1, Math.round(goal(h) / 10));
@@ -286,17 +302,16 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onOpen }: {
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5">
-      {amount ? (
-        <Ring value={progress(h, e)} done={done} label={`${h.name}: ${Math.round(progress(h, e) * 100)}%`} onClick={() => onAmount((e?.value ?? 0) + step)} />
-      ) : (
-        <button type="button" onClick={onToggle} aria-pressed={done} aria-label={done ? `Undo ${h.name}` : h.kind === "quit" ? `Avoided ${h.name} today` : `Mark ${h.name} as done`}
-          className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
-          {done && <Check className="h-4 w-4" strokeWidth={3} />}
-        </button>
-      )}
+      {/* The same tick box as a task. On a count or time habit it fills the goal in one go (or clears it). */}
+      <button type="button" onClick={() => (amount ? onAmount(done ? 0 : goal(h)) : onToggle())} aria-pressed={done}
+        aria-label={done ? `Undo ${h.name}` : h.kind === "quit" ? `Avoided ${h.name} today` : `Mark ${h.name} as done`}
+        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded-[6px] border transition-colors duration-150", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
+        {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+      </button>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <span className={cn("block break-words", done ? "text-ink-muted" : "text-ink")}>{h.name}</span>
+        <span className={cn("block break-words", done || skipped ? "text-ink-faint" : "text-ink", done && "line-through")}>{h.name}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
+          <Badge tone={status === "completed" ? "blue" : status === "in-progress" ? "amber" : "neutral"}>{STATUS_LABEL[status]}</Badge>
           <span>{h.kind === "quit" ? (done ? "Avoided today" : "Tick when you've avoided it today") : goalLabel(h) ? `Goal ${goalLabel(h)}` : kindLabel(h.kind)}</span>
           <span>· {daysLabel(h.days)}</span>
           {streak > 0 && <span className="inline-flex items-center gap-1 text-ink-muted"><Flame className="h-3 w-3" aria-hidden />{streak} {streak === 1 ? "day" : "days"}</span>}
@@ -307,11 +322,12 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onOpen }: {
         {week.map((d) => {
           const p = progress(h, byDay?.get(d));
           const planned = isPlanned(h, d);
-          return <span key={d} title={`${dayLabel(d, now)}: ${p >= 1 ? "done" : p > 0 ? `${Math.round(p * 100)}%` : planned ? (d === now ? "not yet" : "missed") : "not planned"}`}
-            className={cn("h-2.5 w-2.5", p >= 1 ? "bg-ink" : p > 0 ? "bg-ink/40" : planned ? "bg-overlay/15" : "border border-dashed border-overlay/15")} />;
+          const sk = isSkipped(byDay?.get(d));
+          return <span key={d} title={`${dayLabel(d, now)}: ${sk ? "skipped" : p >= 1 ? "done" : p > 0 ? `${Math.round(p * 100)}%` : planned ? (d === now ? "not yet" : "missed") : "not planned"}`}
+            className={cn("h-2.5 w-2.5", sk ? "border border-ink/40" : p >= 1 ? "bg-ink" : p > 0 ? "bg-ink/40" : planned ? "bg-overlay/15" : "border border-dashed border-overlay/15")} />;
         })}
       </span>
-      {amount && (
+      {amount && !skipped && (
         <div className="ml-10 flex shrink-0 items-center gap-1 sm:ml-0">
           <button type="button" onClick={() => onAmount((e?.value ?? 0) - step)} disabled={!e} aria-label={`Less ${h.name}`} className="grid h-8 w-8 place-items-center border border-overlay/15 text-ink-muted disabled:opacity-30"><Minus className="h-4 w-4" /></button>
           <label className="flex items-baseline gap-1 px-1 text-sm tabular-nums">
@@ -326,21 +342,26 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onOpen }: {
           <button type="button" onClick={() => onAmount((e?.value ?? 0) + step)} aria-label={`More ${h.name}`} className="grid h-8 w-8 place-items-center border border-overlay/15 text-ink"><Plus className="h-4 w-4" /></button>
         </div>
       )}
+      {/* Skip today (or undo the skip) in a round liquid glass button. */}
+      {(skipped || !done) && (
+        <div className="ml-10 flex shrink-0 items-center sm:ml-0">
+          <GlassRound onClick={() => onSkip(!skipped)} label={skipped ? `Undo skip of ${h.name}` : `Skip ${h.name} today`}
+            title={skipped ? "Undo skip" : "Skip today: not done, not missed, the streak stays"}>
+            {skipped ? <Undo2 className="h-4 w-4" /> : <SkipForward className="h-4 w-4" />}
+          </GlassRound>
+        </div>
+      )}
     </li>
   );
 }
 
-/** Progress ring for counts and minutes: tap it to add one step. */
-function Ring({ value, done, label, onClick }: { value: number; done: boolean; label: string; onClick: () => void }) {
-  const r = 10;
-  const c = 2 * Math.PI * r;
+/** A small round liquid glass icon button (Skip / Undo skip on a habit). */
+function GlassRound({ onClick, label, title, children }: { onClick: () => void; label: string; title: string; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} title="Tap to add" className="relative grid h-7 w-7 shrink-0 place-items-center">
-      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
-        <circle cx="12" cy="12" r={r} fill="none" stroke="rgb(var(--overlay) / 0.18)" strokeWidth="2.5" />
-        <circle cx="12" cy="12" r={r} fill={done ? "rgb(var(--ink))" : "none"} stroke="rgb(var(--ink))" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${c * value} ${c}`} className="transition-all duration-300" />
-      </svg>
-      {done && <Check className="relative h-3.5 w-3.5 text-canvas" strokeWidth={3} aria-hidden />}
+    <button type="button" onClick={onClick} aria-label={label} title={title}
+      className="glass-fab relative grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium">
+      <span className="pointer-events-none absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={18} blur={3} /></span>
+      <span className="pointer-events-none relative">{children}</span>
     </button>
   );
 }

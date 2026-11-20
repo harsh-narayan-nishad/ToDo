@@ -4,7 +4,7 @@ import { ArrowRight, BedDouble, Moon } from "lucide-react";
 import { HabitRow } from "@/components/HabitsPanel";
 import { SleepDialog } from "@/components/HabitDialogs";
 import { clock, addDays, today } from "@/lib/days";
-import { habitApi, indexEntries, isDone, isPlanned, minutesLabel, type EntryIndex, type Habit, type HabitEntry } from "@/lib/habits";
+import { habitApi, indexEntries, isDone, isDue, isPlanned, minutesLabel, type EntryIndex, type Habit, type HabitEntry } from "@/lib/habits";
 
 /**
  * Today's habits inside the Tasks list, checked in right here (same rows as the Habits tab).
@@ -53,6 +53,19 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
     } catch (e) { fail(e); }
   }
 
+  /** Skip today on purpose, or undo the skip. */
+  async function skip(h: Habit, on: boolean) {
+    const p = pending.current.get(h.id);
+    if (p) { clearTimeout(p.timer); pending.current.delete(h.id); }
+    putToday(h.id, on ? { id: "local", habitId: h.id, day: now, value: 0, bedTime: null, wakeTime: null, quality: null, note: "", skipped: true } : null);
+    try {
+      if (on) putToday(h.id, await habitApi.set(h.id, now, { skip: true }));
+      else await habitApi.clear(h.id, now);
+      setError(null);
+      onChanged();
+    } catch (e) { fail(e); }
+  }
+
   /** Counts and minutes: shown at once, saved after a short pause. */
   const pending = useRef(new Map<string, { value: number; timer: ReturnType<typeof setTimeout> }>());
   const flush = useCallback(async (habitId: string, value: number) => {
@@ -79,6 +92,7 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
   const sleep = planned.find((h) => h.kind === "sleep");
   const others = planned.filter((h) => h.kind !== "sleep");
   const doneCount = planned.filter((h) => isDone(h, index.get(h.id)?.get(now))).length;
+  const dueCount = planned.filter((h) => isDue(h, now, index.get(h.id)?.get(now))).length;
   const shown = onlyDone ? others.filter((h) => isDone(h, index.get(h.id)?.get(now))) : others;
   const lastNight = sleep ? index.get(sleep.id)?.get(now) : undefined;
   const showSleep = sleep && (!onlyDone || !!lastNight);
@@ -87,7 +101,7 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
   return (
     <section>
       <h2 className="mb-3 flex items-center justify-between gap-3 text-sm uppercase tracking-wide text-ink-muted">
-        <span>Habits · {doneCount} of {planned.length}</span>
+        <span>Habits · {doneCount} of {dueCount}</span>
         {onOpenHabits && (
           <button type="button" onClick={onOpenHabits} className="flex items-center gap-1 text-xs normal-case tracking-normal text-ink-faint">
             All habits <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -111,7 +125,7 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
           </li>
         )}
         {shown.map((h) => (
-          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onOpen={() => onOpenHabits?.()} />
+          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} />
         ))}
       </ul>
       {sleepOpen && sleep && (
