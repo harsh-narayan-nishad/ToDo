@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 // Same look as the main app: pill buttons, underlined fields, soft raised cards.
 type Variant = "primary" | "ghost" | "outline" | "danger";
@@ -106,7 +107,7 @@ export function ConfirmDialog({ title, body, confirmLabel, danger, reason, reaso
         {error && <p className="mt-3 text-sm text-accent-extreme" role="alert">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant={danger ? "danger" : "primary"} onClick={() => void submit()} disabled={busy}>{busy ? "Please wait…" : confirmLabel}</Button>
+          <Button variant={danger ? "danger" : "primary"} onClick={() => void submit()} disabled={busy}>{busy && <ButtonWheel />}{busy ? "Please wait…" : confirmLabel}</Button>
         </div>
       </div>
     </div>

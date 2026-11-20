@@ -1,11 +1,11 @@
 "use client";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { ApiError, googleLogin, login, logout, PACEWISE_URL, type User } from "@/lib/api";
 import { Button } from "@/components/ui";
 import { SocialButtons } from "@/components/SocialButtons";
 import { PasswordInput } from "@/components/PasswordInput";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 const BOX = "block w-full rounded-none border border-overlay/25 bg-transparent px-4 py-4 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-ink";
 
@@ -49,7 +49,7 @@ export function LoginCard({ onSignedIn }: { onSignedIn: (u: User) => void }) {
                 <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" autoComplete="current-password" required className={BOX} />
               </label>
               {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
-              <Button type="submit" size="lg" disabled={busy} className="mt-1 h-14 w-full text-base">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{busy ? "Please wait…" : "Sign in"}</Button>
+              <Button type="submit" size="lg" disabled={busy} className="mt-1 h-14 w-full text-base">{busy && <ButtonWheel />}{busy ? "Please wait…" : "Sign in"}</Button>
             </form>
             <p className="mt-6 text-sm text-ink-muted">
               No account yet? <a href={PACEWISE_URL} target="_blank" rel="noopener noreferrer" className="text-ink underline underline-offset-4 hover:text-accent-medium">Create one in Pacewise</a>.

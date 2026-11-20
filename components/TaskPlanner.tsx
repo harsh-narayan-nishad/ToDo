@@ -10,6 +10,7 @@ import { addDays, longDay, today } from "@/lib/days";
 import { titleProblem } from "@/lib/rules";
 import { createBulk, type BulkResult, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 /**
  * The task planner: several tasks over many days in one go — a week of workouts, a month of revision,
@@ -201,7 +202,7 @@ export function TaskPlanner({ onClose, onCreated }: { onClose: () => void; onCre
               <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 pt-2">
                 <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
                 <GlassButton type="button" onClick={() => void submit()} disabled={busy || !!problem} strong>
-                  <Check className="h-4 w-4" />{busy ? "Adding…" : `Add ${total} task${total === 1 ? "" : "s"}`}
+                  {busy ? <ButtonWheel /> : <Check className="h-4 w-4" />}{busy ? "Adding…" : `Add ${total} task${total === 1 ? "" : "s"}`}
                 </GlassButton>
               </div>
             </div>

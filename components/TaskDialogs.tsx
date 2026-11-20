@@ -10,6 +10,7 @@ import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -209,7 +210,7 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
         {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+          <Button type="submit" disabled={busy}>{busy && <ButtonWheel />}{busy ? "Saving…" : "Save"}</Button>
         </div>
       </form>
     </Modal>
@@ -374,7 +375,7 @@ export function LogTimeDialog({ task, onClose, onLogged }: { task: Task; onClose
           <span className="text-sm text-ink-muted">{duration(total)}</span>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Log time"}</Button>
+            <Button type="submit" disabled={busy}>{busy && <ButtonWheel />}{busy ? "Saving…" : "Log time"}</Button>
           </div>
         </div>
       </form>

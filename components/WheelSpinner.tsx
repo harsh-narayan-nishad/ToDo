@@ -36,3 +36,19 @@ export function WheelSpinner({ label = "Loading" }: { label?: string }) {
 export function PanelLoader({ label }: { label?: string }) {
   return <div className="relative h-32"><WheelSpinner label={label} /></div>;
 }
+
+/** Buttons only: the same wheel, small and in the button's own text colour (so it shows on light, dark and coloured buttons). */
+const BUTTON_CSS = `.mc-current .mc-blade{animation-name:mc-spinner-fade-current}
+@keyframes mc-spinner-fade-current{0%{background-color:currentColor}100%{background-color:transparent}}`;
+
+/** The wheel inside a button while its action is in progress, e.g. <Button>{busy && <ButtonWheel />}Saving…</Button>. */
+export function ButtonWheel({ size = 16 }: { size?: number }) {
+  return (
+    <span className="relative inline-block shrink-0" style={{ width: size, height: size }} aria-hidden>
+      <style dangerouslySetInnerHTML={{ __html: CSS + BUTTON_CSS }} />
+      <span className="mc-spinner mc-current" style={{ fontSize: size }}>
+        {Array.from({ length: 12 }, (_, i) => <span key={i} className="mc-blade" />)}
+      </span>
+    </span>
+  );
+}

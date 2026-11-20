@@ -6,15 +6,17 @@ import { GlassButton } from "@/components/GlassButton";
 import { TaskPlanner } from "@/components/TaskPlanner";
 import { PanelLoader } from "@/components/WheelSpinner";
 import { CalendarRange, Check, Clock, Lock, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
-import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL } from "@/components/ui";
+import { Badge, Button, ConfirmDialog, Empty, FIELD, LABEL, Pager } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, TimeFields } from "@/components/TaskDialogs";
 import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/rules";
 import { duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 type Filter = "open" | "done" | "all";
 const PRIORITY_TONE = { high: "red", medium: "amber", low: "blue" } as const;
+const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => void; refreshKey?: number }) {
@@ -41,6 +43,9 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
   }
 
   const now = today();
+  /** Upcoming is paged: a plan can add many future tasks. */
+  const [upPage, setUpPage] = useState(1);
+  useEffect(() => setUpPage(1), [filter]);
   const groups = useMemo(() => {
     const list = (tasks ?? []).filter((t) => filter === "all" || t.status === filter);
     const sort = (a: Task, b: Task) => a.dueDay.localeCompare(b.dueDay) || RANK[a.priority] - RANK[b.priority];
@@ -48,10 +53,15 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
     return [
       { key: "overdue", title: "Overdue", items: open.filter((t) => t.dueDay < now) },
       { key: "today", title: "Today", items: open.filter((t) => t.startDay <= now && t.dueDay >= now) },
-      { key: "upcoming", title: "Upcoming", items: open.filter((t) => t.startDay > now) },
+      // Upcoming only under All, so To do stays about what is due now.
+      { key: "upcoming", title: "Upcoming", items: filter === "all" ? open.filter((t) => t.startDay > now) : [] },
       { key: "done", title: "Done", items: list.filter((t) => t.status === "done").sort((a, b) => (b.completedDay ?? "").localeCompare(a.completedDay ?? "")) },
     ].filter((g) => g.items.length > 0);
   }, [tasks, filter, now]);
+
+  const upcomingCount = (tasks ?? []).filter((t) => t.status === "open" && t.startDay > now).length;
+  /** The current Upcoming page, kept in range when tasks are added or removed. */
+  const page = (n: number) => Math.min(upPage, Math.max(1, Math.ceil(n / UP_PAGE)));
 
   return (
     <div className="flex flex-col gap-8 pb-40">
@@ -64,16 +74,17 @@ export function TasksPanel({ onChanged, refreshKey = 0 }: { onChanged: () => voi
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
       {tasks === null && !error && <PanelLoader label="Loading tasks" />}
-      {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
+      {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : filter === "open" && upcomingCount > 0 ? `Nothing due today. ${upcomingCount} upcoming task${upcomingCount === 1 ? " is" : "s are"} under All.` : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
 
       {groups.map((g) => (
         <section key={g.key}>
           <h2 className={cn("mb-3 text-sm uppercase tracking-wide", g.key === "overdue" ? "text-accent-extreme" : "text-ink-muted")}>{g.title} · {g.items.length}</h2>
           <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-            {g.items.map((t) => (
+            {(g.key === "upcoming" ? g.items.slice((page(g.items.length) - 1) * UP_PAGE, page(g.items.length) * UP_PAGE) : g.items).map((t) => (
               <TaskRow key={t.id} task={t} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)} />
             ))}
           </ul>
+          {g.key === "upcoming" && g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={setUpPage} /></div>}
         </section>
       ))}
 
@@ -111,7 +122,7 @@ function TaskRow({ task: t, onToggle, onEdit, onLog, onDelete }: { task: Task; o
   return (
     <li className="flex items-start gap-4 px-4 py-4 sm:px-5">
       <button onClick={onToggle} disabled={!!locked} title={locked ?? undefined} aria-label={done ? "Mark as not done" : "Mark as done"}
-        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-60", done ? "border-accent-medium bg-accent-medium text-canvas" : "border-overlay/30")}>
+        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
         {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
       </button>
       <div className="min-w-0 flex-1">
@@ -268,7 +279,7 @@ function NewTaskSheet({ tasks, onClose, onCreated }: { tasks: Task[]; onClose: (
           {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
           <div className="flex justify-end gap-2">
             <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
-            <GlassButton type="submit" disabled={busy || !title.trim()} strong><Plus className="h-4 w-4" />{busy ? "Adding…" : "Add task"}</GlassButton>
+            <GlassButton type="submit" disabled={busy || !title.trim()} strong>{busy ? <ButtonWheel /> : <Plus className="h-4 w-4" />}{busy ? "Adding…" : "Add task"}</GlassButton>
           </div>
         </form>
       </div>
