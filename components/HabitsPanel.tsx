@@ -177,14 +177,20 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   return (
     <div className="flex flex-col gap-8 pb-40">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Stat label="Done today" value={plannedToday.length ? `${doneToday} / ${plannedToday.length}` : "–"} hint={plannedToday.length && doneToday === plannedToday.length ? "Everything done. Nice." : undefined} />
-        <Stat label="Perfect days in a row" value={perfect} hint="Every planned habit done" />
-        <div className="col-span-2 lg:col-span-1"><Stat label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} /></div>
+        <Stat className="ios-card" label="Done today" value={plannedToday.length ? `${doneToday} / ${plannedToday.length}` : "–"} hint={plannedToday.length && doneToday === plannedToday.length ? "Everything done. Nice." : undefined} />
+        <Stat className="ios-card" label="Perfect days in a row" value={perfect} hint="Every planned habit done" />
+        <div className="col-span-2 lg:col-span-1"><Stat className="ios-card" label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} /></div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmented label="Habit type" value={filter} options={FILTERS} onChange={setFilter} />
-        <GlassButton type="button" strong onClick={() => setEditing({ preset: filter === "sleep" ? sleepPreset() : filter === "quit" ? { kind: "quit" } : filter !== "all" ? { scale: filter } : undefined })}>
+        {/* Phones: an iOS segmented control and a blue New habit button. */}
+        <div className="w-full md:hidden"><Segmented ios label="Habit type" value={filter} options={FILTERS} onChange={setFilter} /></div>
+        <div className="hidden md:block"><Segmented label="Habit type" value={filter} options={FILTERS} onChange={setFilter} /></div>
+        <button type="button" onClick={() => setEditing({ preset: filter === "sleep" ? sleepPreset() : filter === "quit" ? { kind: "quit" } : filter !== "all" ? { scale: filter } : undefined })}
+          className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3478F6] px-5 text-[15px] font-medium text-white shadow-themed active:scale-[0.97] md:hidden">
+          <Plus className="h-4 w-4" strokeWidth={2.25} />New habit
+        </button>
+        <GlassButton type="button" strong className="max-md:hidden" onClick={() => setEditing({ preset: filter === "sleep" ? sleepPreset() : filter === "quit" ? { kind: "quit" } : filter !== "all" ? { scale: filter } : undefined })}>
           <Plus className="h-4 w-4" />New habit
         </GlassButton>
       </div>
@@ -209,8 +215,8 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
                 return (
                   <div key={g.id}>
                     <h3 className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-ink-muted"><span>{g.title}</span><span className="normal-case tracking-normal text-ink-faint">{done} of {due}{due < list.length ? ` · ${list.length - due} skipped` : ""}</span></h3>
-                    <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-                      {list.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
+                    <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
+                      {list.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
                     </ul>
                   </div>
                 );
@@ -218,8 +224,8 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
               {restList.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-sm uppercase tracking-wide text-ink-muted">Not planned today</h3>
-                  <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10 bg-canvas-raised">
-                    {restList.map((h) => <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
+                  <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
+                    {restList.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
                   </ul>
                 </div>
               )}
@@ -229,7 +235,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
       )}
 
       {filter === "all" && active.length > 0 && (
-        <Card>
+        <Card className="ios-card">
           <h3 className="mb-4 text-sm uppercase tracking-wide text-ink-muted">All habits, last 26 weeks</h3>
           <HabitGrid cells={overall} />
         </Card>

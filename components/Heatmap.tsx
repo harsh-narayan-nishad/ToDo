@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HeatDay, Summary } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +63,9 @@ function PagerPill({ count, index, onSelect, labels }: { count: number; index: n
 }
 
 export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary: Summary; onOpenDay: (day: string) => void }) {
+  /** Opens scrolled to the end, so the current month and today are in view (older months are a scroll to the left). */
+  const scroller = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [days.length]);
   const [slide, setSlide] = useState(0);
   const [hovered, setHovered] = useState<{ day: DayCell; x: number; y: number } | null>(null);
   const byDay = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
@@ -119,7 +122,7 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
 
         <div className="mt-8 flex justify-center">
           <div className="max-w-full">
-            <div className="overflow-x-auto pb-2">
+            <div ref={scroller} className="overflow-x-auto pb-2">
               <div className="inline-flex flex-col gap-2">
                 <div className="grid" style={{ gridTemplateColumns, columnGap: GAP_PX }}>
                   {monthLabels.map((label, wi) => (

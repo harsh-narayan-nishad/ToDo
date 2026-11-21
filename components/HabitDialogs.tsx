@@ -42,9 +42,21 @@ export function GlassSheet({ label, onClose, children, wide }: { label: string; 
 }
 
 /** A row of square options in the To-do style; the chosen one is ink. */
-export function Segmented<T extends string>({ value, options, onChange, disabled, label }: {
+export function Segmented<T extends string>({ value, options, onChange, disabled, label, ios = false }: {
   value: T; options: { id: T; label: string; hint?: string }[]; onChange: (v: T) => void; disabled?: boolean; label: string;
+  /** iOS segmented control: a grey rounded track with the chosen option on a white pill. */
+  ios?: boolean;
 }) {
+  if (ios) return (
+    <div role="radiogroup" aria-label={label} className="ios-seg flex w-full rounded-[10px] p-[3px]">
+      {options.map((o) => (
+        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled && value !== o.id} title={o.hint} onClick={() => onChange(o.id)}
+          className={cn("flex-1 whitespace-nowrap rounded-[8px] px-2 py-1.5 text-[14px] font-medium transition-colors disabled:opacity-40", value === o.id ? "ios-seg-on text-ink" : "text-ink-muted")}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((o) => (
