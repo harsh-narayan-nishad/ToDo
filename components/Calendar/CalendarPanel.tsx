@@ -151,7 +151,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
           </button>
           <div role="tablist" aria-label="Calendar view" className="flex rounded-full bg-overlay/[0.07] p-1">
             {VIEWS.map(({ id, label }) => (
-              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={`rounded-full px-3.5 py-1 text-sm font-medium transition-colors ${view === id ? "bg-overlay/[0.14] text-ink" : "text-ink-muted hover:text-ink"}`}>{label}</button>
+              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => { setView(id); setDate(new Date()); /* each view opens on the current day / week / month / year */ }} className={`rounded-full px-3.5 py-1 text-sm font-medium transition-colors ${view === id ? "bg-overlay/[0.14] text-ink" : "text-ink-muted hover:text-ink"}`}>{label}</button>
             ))}
           </div>
           <span className="w-9" aria-hidden />

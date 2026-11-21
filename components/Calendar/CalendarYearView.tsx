@@ -29,16 +29,26 @@ function YearViewImpl({ date, events, localizer, culture, onDrillDown }: YearVie
     for (let guard = 0; d <= last && guard < 400; guard += 1) { busy.add(dayKey(d)); d.setDate(d.getDate() + 1); }
   }
   const today = dayKey(new Date());
+  const now = new Date();
+  const thisYear = year === now.getFullYear();
+
+  // This year: scroll the current month into view (inside the calendar, not the page).
+  const box = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = box.current;
+    const cur = el?.querySelector<HTMLElement>(".pw-year__month.is-current");
+    if (el && cur) el.scrollTop += cur.getBoundingClientRect().top - el.getBoundingClientRect().top - 12;
+  }, [year]);
 
   return (
-    <div className="pw-year">
+    <div ref={box} className="pw-year">
       {Array.from({ length: 12 }, (_, m) => {
         const startOfMonth = new Date(year, m, 1);
         const lead = (startOfMonth.getDay() - first + 7) % 7;
         const days = new Date(year, m + 1, 0).getDate();
         const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
         return (
-          <div key={m} className="pw-year__month">
+          <div key={m} className={`pw-year__month${thisYear && m === now.getMonth() ? " is-current" : ""}`}>
             <button type="button" className="pw-year__name" onClick={() => onDrillDown(startOfMonth, "month")}>
               {localizer.format(startOfMonth, "MMMM", culture)}
             </button>

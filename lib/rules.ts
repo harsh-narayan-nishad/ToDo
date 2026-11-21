@@ -50,6 +50,11 @@ export function lockedProblem(task: { status: string; dueDay: string; completedD
   return null;
 }
 
+/** One day of grace: an open task can still be ticked done on the day after its due day (only ticked done). */
+export function lateFinishAllowed(task: { status: string; dueDay: string }, today = localDay()): boolean {
+  return task.status !== "done" && diff(task.dueDay, today) === 1;
+}
+
 /** Days work can be logged for: today only (BACKFILL_DAYS), but not after the day a finished task was finished. */
 export function loggableDays(task: { status: string; completedDay: string | null }, today = localDay()): string[] {
   const days = Array.from({ length: BACKFILL_DAYS + 1 }, (_, i) => addDays(today, -i));
