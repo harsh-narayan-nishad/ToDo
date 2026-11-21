@@ -18,12 +18,18 @@ export interface DropdownItem { id: string; label: string; meta?: string; /** An
 /** `title` "" = a group without a heading. */
 export interface DropdownGroup { title: string; items: DropdownItem[] }
 
-type Pos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number };
+type Pos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number; /** where the button is */ a: { top: number; left: number; width: number; height: number } };
 
-export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0 }: {
+export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0, ios = false, ghost }: {
   anchor: React.RefObject<HTMLElement>; groups: DropdownGroup[]; value: string; onSelect: (id: string) => void; onClose: () => void; label: string; minWidth?: number;
+  /** An iOS pull-down menu: rounded frosted panel, full-width rows with thin separators, a tick on the chosen one. */
+  ios?: boolean;
+  /** iOS: the button as it looks, drawn sharp above the dimmed screen at the button's place (the real one is under the blur). */
+  ghost?: React.ReactNode;
 }) {
   const menu = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Pos | null>(null);
 
   const place = () => {
@@ -34,13 +40,16 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
     const below = window.innerHeight - r.bottom - 16;
     const above = r.top - 16;
     // at most ~8 rows tall, then it scrolls; opens upwards when there is clearly more room above
-    if (below < 220 && above > below) setPos({ left, width, bottom: window.innerHeight - r.top + 6, maxHeight: Math.min(320, above) });
-    else setPos({ left, width, top: r.bottom + 6, maxHeight: Math.max(160, Math.min(320, below)) });
+    const a = { top: r.top, left: r.left, width: r.width, height: r.height };
+    if (below < 220 && above > below) setPos({ left, width, bottom: window.innerHeight - r.top + 6, maxHeight: Math.min(320, above), a });
+    else setPos({ left, width, top: r.bottom + 6, maxHeight: Math.max(160, Math.min(320, below)), a });
   };
   useLayoutEffect(place, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
+      // the backdrop and the button's copy close on their own click, so the tap goes nowhere else
+      if ((backdrop.current && e.target === backdrop.current) || ghostRef.current?.contains(e.target as Node)) return;
       if (!menu.current?.contains(e.target as Node) && !anchor.current?.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); anchor.current?.focus(); } };
@@ -72,15 +81,31 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
 
   if (!pos) return null;
   return createPortal(
+    <>
+    {/* iOS: the screen behind dims and blurs while the menu is open; a tap there closes it (and reaches nothing underneath). */}
+    {ios && <div ref={backdrop} className="ios-menu-backdrop fade-in fixed inset-0 z-[155]" aria-hidden onClick={onClose} />}
+    {ios && ghost && (
+      <div ref={ghostRef} className="fixed z-[158] cursor-pointer" style={pos.a} aria-hidden onClick={onClose}>{ghost}</div>
+    )}
     <div ref={menu} role="listbox" aria-label={label} onKeyDown={onMenuKey}
-      className="glass-in fixed z-[160] overflow-hidden rounded-none border border-overlay/10 bg-canvas-raised shadow-themed"
+      className={ios ? "ios-menu glass-in fixed z-[160] overflow-hidden rounded-[14px]" : "glass-in fixed z-[160] overflow-hidden rounded-none border border-overlay/10 bg-canvas-raised shadow-themed"}
       style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
-      <div className="overflow-y-auto py-1" style={{ maxHeight: pos.maxHeight }}>
+      <div className={cn("overflow-y-auto", !ios && "py-1")} style={{ maxHeight: pos.maxHeight }}>
         {groups.map((g, gi) => (
-          <div key={g.title || `g${gi}`} className={cn(gi > 0 && "mt-1 border-t border-overlay/10 pt-1")}>
-            {g.title && <p className="px-4 pb-1.5 pt-2 text-xs uppercase tracking-wide text-ink-muted">{g.title}</p>}
-            {g.items.map((it) => {
+          <div key={g.title || `g${gi}`} className={cn(gi > 0 && (ios ? "border-t-[7px] border-overlay/[0.07]" : "mt-1 border-t border-overlay/10 pt-1"))}>
+            {g.title && <p className={ios ? "px-4 pb-1 pt-2.5 text-[13px] text-ink-muted" : "px-4 pb-1.5 pt-2 text-xs uppercase tracking-wide text-ink-muted"}>{g.title}</p>}
+            {g.items.map((it, ii) => {
               const on = it.id === value;
+              if (ios) return (
+                <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); onClose(); anchor.current?.focus(); }}
+                  className={cn("flex w-full items-center gap-2.5 px-4 py-[11px] text-left text-[16px] outline-none transition-colors active:bg-overlay/[0.08] focus-visible:bg-overlay/[0.07]", ii < g.items.length - 1 && "border-b border-overlay/10", it.danger ? "text-[#FF3B30]" : "text-ink")}>
+                  {/* action items (with an icon, shown on the right like iOS) need no tick column */}
+                  {!it.icon && <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} strokeWidth={2.5} aria-hidden />}
+                  <span className="flex-1 truncate">{it.label}</span>
+                  {it.meta && <span className="shrink-0 text-[15px] tabular-nums text-ink-faint">{it.meta}</span>}
+                  {it.icon && <it.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden />}
+                </button>
+              );
               return (
                 <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); onClose(); anchor.current?.focus(); }}
                   className={cn("flex w-full items-center gap-3 px-4 py-2 text-left text-sm normal-case tracking-normal outline-none transition-colors focus-visible:bg-overlay/[0.07]", on ? "bg-ink text-canvas" : it.danger ? "text-accent-extreme" : "text-ink")}>
@@ -94,17 +119,31 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
           </div>
         ))}
       </div>
-    </div>,
+    </div>
+    </>,
     document.body,
   );
 }
 
 /** A wide liquid glass button showing the chosen value, with the menu exactly as wide as the button. */
-export function GlassDropdown({ value, display, groups, onSelect, label, className }: {
+export function GlassDropdown({ value, display, groups, onSelect, label, className, ios = false }: {
   value: string; display: string; groups: DropdownGroup[]; onSelect: (id: string) => void; label: string; className?: string;
+  /** iOS look: a white pill button and an iOS pull-down menu (phones' To do filter). */
+  ios?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  if (ios) return (
+    <>
+      <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${display}`}
+        className={cn("inline-flex h-10 items-center justify-between gap-2 rounded-full bg-[#3478F6] px-4 text-left text-[15px] font-medium text-white shadow-themed active:scale-[0.97]", className)}>
+        <span className="truncate">{display}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/85 transition-transform duration-200", open && "rotate-180")} strokeWidth={2.25} aria-hidden />
+      </button>
+      {open && <DropdownMenu ios anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} minWidth={240}
+        ghost={<span className="flex h-full w-full items-center justify-between gap-2 rounded-full bg-[#3478F6] px-4 text-[15px] font-medium text-white"><span className="truncate">{display}</span><ChevronDown className="h-4 w-4 shrink-0 rotate-180 text-white/85" strokeWidth={2.25} /></span>} />}
+    </>
+  );
   return (
     <>
       <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${display}`}

@@ -100,7 +100,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
     <div className="flex flex-col gap-8 pb-40">
       {/* Phones: To do / Done / All and Overview in one dropdown. */}
       <div className="flex items-center gap-3 md:hidden">
-        <GlassDropdown label="Show" className="w-40" value={filter} display={filter === "open" ? "To do" : filter === "done" ? "Done" : "All"}
+        <GlassDropdown ios label="Show" className="w-32" value={filter} display={filter === "open" ? "To do" : filter === "done" ? "Done" : "All"}
           groups={[
             { title: "Show", items: [
               { id: "open", label: "To do", meta: tasks ? String(tasks.filter((t) => t.status === "open").length) : undefined },
@@ -184,7 +184,7 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
         <div className="min-w-0 flex-1 pt-2">
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-muted">
             <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{rangeLabel(t.startDay, t.dueDay)}</span>
-            {t.startTime && <span className="flex items-center gap-1"><Timer className="h-3.5 w-3.5" aria-hidden />{clock(t.startTime)}</span>}
+            {t.startTime && <span className="flex items-center gap-1"><Timer className="h-3.5 w-3.5" aria-hidden />{clock(t.startTime)}{planned(t) ? ` · ${duration(planned(t)!)}` : ""}</span>}
           </p>
           <p className={cn("mt-1 break-words text-[17px] leading-snug", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</p>
           {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
@@ -224,6 +224,15 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
   );
 }
 
+/** How long a timed task is planned for, in minutes (its start to its end, across days too); null without times. */
+function planned(t: Task): number | null {
+  if (!t.startTime || !t.endTime) return null;
+  const m = (time: string) => { const [h, mm] = time.split(":").map(Number); return h * 60 + mm; };
+  const days = Math.round((new Date(t.dueDay + "T12:00").getTime() - new Date(t.startDay + "T12:00").getTime()) / 86_400_000);
+  const total = days * 1440 + m(t.endTime) - m(t.startTime);
+  return total > 0 ? total : null;
+}
+
 /** Phones: the ⋯ on a task card, with Log time, Edit and Delete. */
 function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
@@ -235,7 +244,8 @@ function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () =
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
-        <DropdownMenu anchor={trigger} label="Task actions" value="" minWidth={170} onClose={() => setOpen(false)}
+        <DropdownMenu ios anchor={trigger} label="Task actions" value="" minWidth={200}
+          ghost={<span className="ios-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
           groups={[{ title: "", items: [{ id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
           onSelect={(id) => (id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}
