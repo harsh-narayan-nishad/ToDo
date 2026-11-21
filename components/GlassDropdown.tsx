@@ -14,13 +14,13 @@ import { cn } from "@/lib/utils";
  * Triggers: GlassDropdown (a wide glass button showing the value), RoundMenuButton (a small round glass ⌄),
  * and CellSelect (a plain spreadsheet cell showing the value).
  */
-export interface DropdownItem { id: string; label: string; meta?: string }
+export interface DropdownItem { id: string; label: string; meta?: string; /** An icon in place of the check (action menus). */ icon?: typeof Check; /** Shown in red (e.g. Delete). */ danger?: boolean }
 /** `title` "" = a group without a heading. */
 export interface DropdownGroup { title: string; items: DropdownItem[] }
 
 type Pos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number };
 
-function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0 }: {
+export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0 }: {
   anchor: React.RefObject<HTMLElement>; groups: DropdownGroup[]; value: string; onSelect: (id: string) => void; onClose: () => void; label: string; minWidth?: number;
 }) {
   const menu = useRef<HTMLDivElement>(null);
@@ -83,8 +83,9 @@ function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidt
               const on = it.id === value;
               return (
                 <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); onClose(); anchor.current?.focus(); }}
-                  className={cn("flex w-full items-center gap-3 px-4 py-2 text-left text-sm normal-case tracking-normal outline-none transition-colors focus-visible:bg-overlay/[0.07]", on ? "bg-ink text-canvas" : "text-ink")}>
-                  <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} strokeWidth={2.25} aria-hidden />
+                  className={cn("flex w-full items-center gap-3 px-4 py-2 text-left text-sm normal-case tracking-normal outline-none transition-colors focus-visible:bg-overlay/[0.07]", on ? "bg-ink text-canvas" : it.danger ? "text-accent-extreme" : "text-ink")}>
+                  {it.icon ? <it.icon className={cn("h-4 w-4 shrink-0", !on && !it.danger && "text-ink-muted")} strokeWidth={1.75} aria-hidden />
+                    : <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} strokeWidth={2.25} aria-hidden />}
                   <span className="flex-1 truncate">{it.label}</span>
                   {it.meta && <span className={cn("shrink-0 text-xs tabular-nums", on ? "text-canvas/70" : "text-ink-faint")}>{it.meta}</span>}
                 </button>
@@ -108,7 +109,7 @@ export function GlassDropdown({ value, display, groups, onSelect, label, classNa
     <>
       <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${display}`}
         className={cn("glass-fab relative inline-flex h-12 w-full items-center justify-between gap-3 rounded-2xl px-4 text-left text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium", className)}>
-        <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={16} blur={4} /></span>
+        <span className="glass-clear absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={16} blur={4} /></span>
         <span className="relative truncate">{display}</span>
         <ChevronDown className={cn("relative h-4 w-4 shrink-0 text-ink-muted transition-transform duration-200", open && "rotate-180")} aria-hidden />
       </button>

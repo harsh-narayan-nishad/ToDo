@@ -138,11 +138,13 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
   }, [date, view]);
   const go = (n: number) => setDate(moment(date).add(n, view === "day" ? "day" : view === "week" ? "week" : view === "year" ? "year" : "month").toDate());
 
+  /** Day and Week open at the current time (an hour before it, so "now" sits near the top), not at midnight. */
+  const scrollToTime = useMemo(() => { const d = new Date(); d.setHours(Math.max(0, d.getHours() - 1), 0, 0, 0); return d; }, []);
   const eventPropGetter = useMemo<NonNullable<CalendarProps<CalEvent>["eventPropGetter"]>>(() => (e) => ({ className: `event-variant-${e.variant}` }), []);
 
   return (
     <>
-      <Card className="rounded-[32px] bg-canvas-raised p-4 sm:p-6">
+      <Card className="ios-card rounded-[32px] bg-canvas-raised p-4 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <button type="button" aria-label="New event" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
             <Plus className="h-4 w-4" />
@@ -180,6 +182,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
             onDrillDown={(d: Date, v?: string) => { setDate(d); setView(v ?? Views.DAY); }}
             events={events ?? []}
             eventPropGetter={eventPropGetter}
+            scrollToTime={scrollToTime}
             draggableAccessor={() => true}
             resizableAccessor={() => true}
             onSelectSlot={onSelectSlot}

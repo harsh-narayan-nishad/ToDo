@@ -16,6 +16,8 @@ const TONE: Record<Tone, string> = {
   blue: "bg-accent-slow/15 text-accent-slow",
   neutral: "bg-overlay/10 text-ink-muted",
 };
+/** iOS-style icon tiles: a solid colour with a white icon. */
+const TILE: Record<Tone, string> = { red: "#FF3B30", amber: "#FF9500", blue: "#007AFF", neutral: "#8E8E93" };
 const KEY = "pacewise-todo-notifications";
 /** Read and cleared notifications, remembered on this device only. */
 function loadSeen(): { read: string[]; gone: string[] } {
@@ -109,7 +111,7 @@ export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: numbe
   const place = () => {
     const r = button.current?.getBoundingClientRect();
     if (!r) return;
-    const width = Math.min(340, window.innerWidth - 24);
+    const width = Math.min(360, window.innerWidth - 24);
     setPos({ top: r.bottom + 8, width, left: Math.max(12, Math.min(r.right - width, window.innerWidth - width - 12)) });
   };
   useLayoutEffect(() => { if (open) place(); }, [open]);
@@ -127,34 +129,40 @@ export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: numbe
   return (
     <>
       <button ref={button} type="button" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-overlay/[0.08] text-ink-muted transition-colors active:scale-95">
-        <Bell className="h-4 w-4" />
+        className="ios-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink transition-transform active:scale-95">
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {unread > 0 && (
-          <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent-extreme px-1 text-[10px] font-semibold leading-none text-white">{unread > 9 ? "9+" : unread}</span>
+          <span className="absolute -right-1 -top-1 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-canvas">{unread > 9 ? "9+" : unread}</span>
         )}
       </button>
       {open && pos && createPortal(
-        <div ref={panel} role="dialog" aria-label="Notifications" className="glass-in fixed z-[120] overflow-hidden rounded-xl border border-overlay/10 bg-canvas-raised shadow-themed"
+        // Like iOS Notification Centre: a blurred backdrop, a bold title, and each notification on its own frosted card.
+        <div ref={panel} role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
           style={{ top: pos.top, left: pos.left, width: pos.width }}>
-          <div className="flex items-center justify-between border-b border-overlay/10 px-3.5 py-2.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Notifications</span>
-            {unread > 0 && <button type="button" onClick={markAll} className="flex items-center gap-1 text-xs text-ink-muted"><CheckCheck className="h-3.5 w-3.5" /> Mark all read</button>}
+          <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
+            <span className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Notifications</span>
+            {unread > 0 && (
+              <button type="button" onClick={markAll} className="ios-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-ink-muted active:scale-95">
+                <CheckCheck className="h-3.5 w-3.5" /> Mark all read
+              </button>
+            )}
           </div>
-          <div className="max-h-[min(24rem,70vh)] overflow-y-auto">
-            {notes.length === 0 ? <p className="px-3.5 py-6 text-center text-sm text-ink-muted">You're all caught up.</p> : notes.map((n) => {
+          <div className="flex max-h-[min(26rem,70vh)] flex-col gap-2 overflow-y-auto">
+            {notes.length === 0 ? <p className="ios-notif rounded-[18px] px-4 py-6 text-center text-[15px] text-ink-muted">You're all caught up.</p> : notes.map((n) => {
               const Icon = n.icon;
               const read = seen.read.includes(n.id);
               return (
-                <div key={n.id} className="flex items-start gap-2 border-b border-overlay/5 px-3.5 py-2.5 last:border-b-0">
-                  <button type="button" onClick={() => { update({ ...seen, read: [...new Set([...seen.read, n.id])] }); setOpen(false); onNavigate(n.tab); }} className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
-                    <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", TONE[n.tone])}><Icon className="h-3.5 w-3.5" /></span>
+                <div key={n.id} className={cn("ios-notif relative flex items-start gap-3 rounded-[18px] p-3 pr-10 transition-opacity", read && "opacity-70")}>
+                  <button type="button" onClick={() => { update({ ...seen, read: [...new Set([...seen.read, n.id])] }); setOpen(false); onNavigate(n.tab); }} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-white" style={{ backgroundColor: TILE[n.tone] }}><Icon className="h-[18px] w-[18px]" strokeWidth={2} /></span>
                     <span className="min-w-0 flex-1">
-                      <span className={cn("block break-words text-sm", read ? "text-ink-muted" : "text-ink")}>{n.message}</span>
-                      <span className="block truncate text-xs text-ink-faint">{n.detail}</span>
+                      <span className={cn("block break-words text-[15px] leading-snug text-ink", read ? "font-normal" : "font-semibold")}>{n.message}</span>
+                      <span className="mt-0.5 block line-clamp-2 text-[14px] leading-snug text-ink-muted">{n.detail}</span>
                     </span>
-                    {!read && <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-extreme" aria-label="Unread" />}
+                    {!read && <span className="sr-only">Unread</span>}
                   </button>
-                  <button type="button" onClick={() => clear(n.id)} aria-label="Clear notification" className="shrink-0 rounded-full p-1 text-ink-faint"><X className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => clear(n.id)} aria-label="Clear notification"
+                    className="absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full bg-overlay/10 text-ink-muted active:scale-95"><X className="h-3 w-3" strokeWidth={2.5} /></button>
                 </div>
               );
             })}

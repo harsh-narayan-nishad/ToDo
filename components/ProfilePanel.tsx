@@ -24,7 +24,7 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
 
   return (
     <div className="flex flex-col gap-8">
-      <Card className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="ios-card flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-14 w-14 object-cover" /> : (
             <span className="flex h-14 w-14 items-center justify-center bg-overlay/10 font-display text-2xl">{user.name.slice(0, 1).toUpperCase()}</span>
@@ -37,19 +37,15 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Tasks created" value={t.created} />
-        <Stat label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
-        <Stat label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
-        <Stat label="Hours worked" value={`${t.hours} h`} tone="blue" hint={t.workedDays ? `about ${duration(t.avgMinutesPerWorkedDay)} per working day` : "log time on a task"} />
+        <Stat className="ios-card" label="Tasks created" value={t.created} />
+        <Stat className="ios-card" label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
+        <Stat className="ios-card" label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
+        <Stat className="ios-card" label="Hours worked" value={`${t.hours} h`} tone="blue" hint={t.workedDays ? `about ${duration(t.avgMinutesPerWorkedDay)} per working day` : "log time on a task"} />
       </div>
 
       <WeekChart days={data.heatmap.slice(-7)} onOpenDay={onOpenDay} />
 
-      <Card>
-        <h2 className="mb-4 text-sm uppercase tracking-wide text-ink-muted">Consistency · last 26 weeks</h2>
-        <Heatmap days={data.heatmap} onOpenDay={onOpenDay} />
-        <p className="mt-4 text-xs text-ink-faint">A day counts when you log any time or finish a task, the same rule Pacewise uses for reading streaks. Click a day to see what you did.</p>
-      </Card>
+      <Heatmap days={data.heatmap} summary={data} onOpenDay={onOpenDay} />
     </div>
   );
 }
@@ -72,7 +68,7 @@ function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: stri
   const label = (d: HeatDay) => { const l = dayLabel(d.day); return l === "Today" ? "Today" : WEEKDAY[new Date(d.day + "T12:00").getDay()]; };
 
   return (
-    <Card>
+    <Card className="ios-card">
       <div className="mb-1 flex items-center gap-2"><Flame className="h-4 w-4 text-accent-fast" /><h2 className="text-sm uppercase tracking-wide text-ink-muted">Last 7 days</h2></div>
       <p className="mb-5 font-display text-3xl text-ink">{hm(total)}</p>
 

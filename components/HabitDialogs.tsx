@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArchiveRestore, Check, Flame, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, Check, Clock, Flame, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
 import { GlassDropdown } from "@/components/GlassDropdown";
@@ -100,6 +100,9 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
   const [unit, setUnit] = useState(start?.unit ?? "");
   const [days, setDays] = useState<number[]>(start?.days ?? ALL_DAYS);
   const [cue, setCue] = useState(start?.cue ?? "");
+  /** At what time (optional): picked on the same clock as a task's time. */
+  const [time, setTime] = useState<string | null>(start?.time ?? null);
+  const [timeOpen, setTimeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -112,7 +115,7 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
   const ideas = useMemo(() => {
     if (habit) return [];
     const q = name.trim().toLowerCase();
-    return TEMPLATES.filter((t) => t.scale === scale && !taken.has(t.name.toLowerCase()) && !(t.kind === "sleep" && hasSleep) && (!q || t.name.toLowerCase().includes(q)) && t.name.toLowerCase() !== q).slice(0, 8);
+    return TEMPLATES.filter((t) => t.scale === scale && !taken.has(t.name.toLowerCase()) && t.kind !== "sleep" && (!q || t.name.toLowerCase().includes(q)) && t.name.toLowerCase() !== q).slice(0, 8);
   }, [name, scale, habit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pickKind(k: HabitKind) {
@@ -140,7 +143,7 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), kind, scale, category: kind === "sleep" ? "sleep" : category, target: t, unit: kind === "count" ? unit.trim() : "", days, cue: cue.trim() });
+      await onSave({ name: name.trim(), kind, scale, category: kind === "sleep" ? "sleep" : category, target: t, unit: kind === "count" ? unit.trim() : "", days, cue: cue.trim(), time: kind === "sleep" ? null : time });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the habit.");
@@ -176,7 +179,7 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
         )}
         <div className="flex flex-col gap-2">
           <span className={LABEL}>Type{habit && <span className="ml-2 text-xs text-ink-faint">(can't be changed)</span>}</span>
-          <Segmented label="Type" value={kind} options={KINDS.filter((k) => k.id !== "sleep" || !hasSleep || kind === "sleep")} onChange={pickKind} disabled={!!habit} />
+          <Segmented label="Type" value={kind} options={KINDS.filter((k) => k.id !== "sleep" || kind === "sleep")} onChange={pickKind} disabled={!!habit} />
           <p className="text-xs text-ink-faint">{KINDS.find((k) => k.id === kind)?.hint}</p>
         </div>
         {(kind === "count" || kind === "duration" || kind === "sleep") && (
@@ -195,6 +198,24 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
           <span className={LABEL}>Days</span>
           <DayPicker days={days} setDays={setDays} />
         </div>
+        {kind !== "sleep" && (
+          <div className={LABEL}>
+            <span>Time (optional)</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setTimeOpen(true)} aria-label={time ? `Time: ${clock(time)}. Change` : "Pick a time"}
+                className={cn(FIELD, "flex items-center justify-between text-left", !time && "text-ink-faint")}>
+                <span className="tabular-nums">{time ? clock(time) : "Any time"}</span>
+                <Clock className="h-4 w-4 text-ink-muted" aria-hidden />
+              </button>
+              {time && <button type="button" onClick={() => setTime(null)} aria-label="Clear the time" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted"><X className="h-4 w-4" /></button>}
+            </div>
+            {timeOpen && (
+              <ClockPopup title="Time" onClose={() => setTimeOpen(false)}>
+                <AnalogClock label="Time" value={time ?? "07:00"} onChange={setTime} />
+              </ClockPopup>
+            )}
+          </div>
+        )}
         {kind !== "sleep" && (
           <div className="flex flex-col gap-2">
             <span className={LABEL}>Category</span>

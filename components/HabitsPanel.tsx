@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BedDouble, Check, ChevronDown, Flame, Minus, Moon, Plus, SkipForward, Sunrise, Undo2 } from "lucide-react";
+import { BedDouble, Check, ChevronDown, Flame, Minus, Moon, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
 import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 /** The habit tracker types, as the filter at the top: by size (micro → macro), habits to quit, and sleep. */
 type Filter = "all" | HabitScale | "quit" | "sleep";
 const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" }, { id: "micro", label: "Micro" }, { id: "daily", label: "Daily" }, { id: "macro", label: "Macro" }, { id: "quit", label: "Quit" }, { id: "sleep", label: "Sleep" },
+  { id: "all", label: "All" }, { id: "micro", label: "Micro" }, { id: "daily", label: "Daily" }, { id: "macro", label: "Macro" }, { id: "quit", label: "Quit" },
 ];
 const GROUPS: { id: HabitScale; title: string }[] = [{ id: "micro", title: "Micro habits" }, { id: "daily", title: "Daily habits" }, { id: "macro", title: "Macro habits" }];
 /** A year and a bit of check-ins: enough for streaks and the 26-week grids. */
@@ -176,11 +176,10 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 
   return (
     <div className="flex flex-col gap-8 pb-40">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Stat label="Done today" value={plannedToday.length ? `${doneToday} / ${plannedToday.length}` : "–"} hint={plannedToday.length && doneToday === plannedToday.length ? "Everything done. Nice." : undefined} />
         <Stat label="Perfect days in a row" value={perfect} hint="Every planned habit done" />
-        <Stat label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} />
-        <Stat label="Last night's sleep" value={lastNight ? minutesLabel(lastNight.value) : "–"} hint={sleepHabit ? (lastNight ? `Goal ${minutesLabel(sleepHabit.target)}` : "Not logged yet") : "Not tracked"} />
+        <div className="col-span-2 lg:col-span-1"><Stat label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} /></div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -191,11 +190,6 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
-
-      {(filter === "all" || filter === "sleep") && (
-        <SleepCard habit={sleepHabit} byDay={sleepHabit ? index.get(sleepHabit.id) : undefined}
-          onLog={() => setSleepOpen(true)} onStart={() => setEditing({ preset: sleepPreset() })} onOpen={() => sleepHabit && setDetailId(sleepHabit.id)} />
-      )}
 
       {filter !== "sleep" && (
         <>
@@ -289,8 +283,12 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 const sleepPreset = (): Partial<HabitInput> => TEMPLATES.find((t) => t.kind === "sleep")!;
 
 /** One habit for today: its control (tick, or − amount +), name and plan, streak, and the last 7 days. */
-export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen }: {
+export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete }: {
   habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onSkip: (on: boolean) => void; onOpen: () => void;
+  /** Phones: a rounded card with a round check, like a task card (used in the Tasks list). */
+  card?: boolean;
+  /** When given: a round Delete button next to Skip (the caller asks to confirm). */
+  onDelete?: () => void;
 }) {
   const e = byDay?.get(now);
   const done = isDone(h, e);
@@ -303,19 +301,20 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5">
+    <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "ios-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5")}>
       {/* The same tick box as a task. On a count or time habit it fills the goal in one go (or clears it). */}
       <button type="button" onClick={() => (amount ? onAmount(done ? 0 : goal(h)) : onToggle())} aria-pressed={done}
         aria-label={done ? `Undo ${h.name}` : h.kind === "quit" ? `Avoided ${h.name} today` : `Mark ${h.name} as done`}
-        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded-[6px] border transition-colors duration-150", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
+        className={cn(card && "max-md:ml-1.5 max-md:mt-2.5", "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded-[6px] border transition-colors duration-150", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
         {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-[1_1_12rem] text-left sm:flex-1">
-        <span className={cn("block break-words", done || skipped ? "text-ink-faint" : "text-ink", done && "line-through")}>{h.name}</span>
+      <button type="button" onClick={onOpen} className={cn("min-w-0 flex-[1_1_12rem] text-left sm:flex-1", card && "max-md:pt-2.5")}>
+        <span className={cn("block break-words", done || skipped ? "text-ink-faint" : "text-ink", done && "line-through", card && "max-md:text-[17px] max-md:leading-snug")}>{h.name}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
-          <Badge tone={status === "completed" ? "blue" : status === "in-progress" ? "amber" : "neutral"}>{STATUS_LABEL[status]}</Badge>
+          <Badge tone={status === "completed" ? "blue" : status === "in-progress" ? "amber" : "neutral"} className={card ? "max-md:rounded-full" : undefined}>{STATUS_LABEL[status]}</Badge>
           <span>{h.kind === "quit" ? (done ? "Avoided today" : "Tick when you've avoided it today") : goalLabel(h) ? `Goal ${goalLabel(h)}` : kindLabel(h.kind)}</span>
           <span>· {daysLabel(h.days)}</span>
+          {h.time && <span>· {clock(h.time)}</span>}
           {streak > 0 && <span className="inline-flex items-center gap-1 text-ink-muted"><Flame className="h-3 w-3" aria-hidden />{streak} {streak === 1 ? "day" : "days"}</span>}
         </span>
         {h.cue && <span className="mt-1 block truncate text-xs italic text-ink-faint">{h.cue}</span>}
@@ -343,12 +342,20 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
       )}
       {wheel && <AmountWheel habit={h} value={e?.value ?? 0} step={step} onChange={onAmount} onClose={() => setWheel(false)} />}
       {/* Skip today (or undo the skip) in a round liquid glass button. */}
-      {(skipped || !done) && (
-        <div className="order-2 ml-auto flex shrink-0 items-center self-start sm:order-none sm:ml-0 sm:self-center">
-          <GlassRound onClick={() => onSkip(!skipped)} label={skipped ? `Undo skip of ${h.name}` : `Skip ${h.name} today`}
-            title={skipped ? "Undo skip" : "Skip today: not done, not missed, the streak stays"}>
-            {skipped ? <Undo2 className="h-4 w-4" /> : <SkipForward className="h-4 w-4" />}
-          </GlassRound>
+      {(skipped || onDelete) && (
+        <div className="order-2 ml-auto flex shrink-0 items-center gap-2 self-start sm:order-none sm:ml-0 sm:self-center">
+          {/* The Skip button is gone; a day skipped before can still be un-skipped. */}
+          {skipped && (
+            <GlassRound onClick={() => onSkip(false)} label={`Undo skip of ${h.name}`} title="Undo skip">
+              <Undo2 className="h-4 w-4" />
+            </GlassRound>
+          )}
+          {onDelete && (
+            <button type="button" onClick={onDelete} aria-label={`Delete ${h.name}`} title="Delete this habit"
+              className="ios-circle-btn grid h-9 w-9 shrink-0 place-items-center rounded-full active:scale-95">
+              <Trash2 className="h-4 w-4 text-[#FF3B30]" />
+            </button>
+          )}
         </div>
       )}
     </li>

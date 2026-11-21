@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, Check, Clock as ClockIcon, FileUp, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Check, Clock as ClockIcon, FileUp, History, Plus, Trash2 } from "lucide-react";
 import { searchSyllabus, syllabusKey, syllabusNote, syllabusPath, syllabusTitle, type SyllabusItem } from "@/lib/neetSyllabus";
 import { AnalogClock, ClockPopup } from "@/components/TaskDialogs";
 import { addMinutesToTime, clock } from "@/lib/days";
-import type { Priority } from "@/lib/todo";
+import type { Entry, Priority } from "@/lib/todo";
+import { entryPath, searchEntries, useEntries } from "@/lib/entries";
 import { cn } from "@/lib/utils";
 import { INTERVALS, PATTERNS, parseRepeat, type Repeat } from "@/lib/repeat";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -187,8 +188,9 @@ export function findClashes(rows: SheetRow[], daysFor: (r: SheetRow) => string[]
 /** The app's dropdown menus for the Priority and Repeat columns (cells and headers). */
 const PRIORITY_GROUPS: DropdownGroup[] = [{ title: "Priority", items: [{ id: "low", label: "Low" }, { id: "medium", label: "Medium" }, { id: "high", label: "High" }] }];
 const PRIORITY_LABEL: Record<Priority, string> = { low: "Low", medium: "Medium", high: "High" };
-const repeatGroups = (once: boolean): DropdownGroup[] => [
-  { title: "", items: [{ id: "", label: once ? "Once" : "Plan's repeat" }] },
+/** `plan` = the When section's repeat ("Every day"), shown next to "Plan's repeat". */
+const repeatGroups = (once: boolean, plan?: string): DropdownGroup[] => [
+  { title: "", items: [{ id: "", label: once ? "Once" : "Plan's repeat", meta: once ? undefined : plan }] },
   { title: "Every N days", items: [{ id: "daily", label: "Every 1 day" }, ...INTERVALS.map((x, i) => ({ id: x.id, label: `Every ${i + 2} days` }))] },
   { title: "Pattern", items: PATTERNS.filter((x) => x.id !== "custom" && x.id !== "daily") },
 ];
@@ -199,11 +201,13 @@ const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none plac
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
 const TD = "border-b border-r border-overlay/10 p-0 transition-[background-color,box-shadow] duration-150 focus-within:bg-overlay/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgb(var(--ink)/0.45)]";
 
-export function TaskSheet({ rows, setRows, clashes, neet = false }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean }) {
+export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [clockFor, setClockFor] = useState<{ key: number; which: "from" | "to" } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** What this person added before, suggested in every Title cell (for everyone, not only NEET). */
+  const entries = useEntries();
 
   const update = (key: number, patch: Partial<SheetRow>) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const focusCell = (r: number, c: number) => setTimeout(() => tableRef.current?.querySelector<HTMLElement>(`[data-cell="${r}-${c}"]`)?.focus(), 0);
@@ -282,7 +286,7 @@ export function TaskSheet({ rows, setRows, clashes, neet = false }: { rows: Shee
                   {col.id === "priority" ? (
                     <HeaderSetAll label="Priority" groups={PRIORITY_GROUPS} onPick={(v) => setRows((list) => list.map((r) => ({ ...r, priority: v as Priority })))} />
                   ) : col.id === "repeat" ? (
-                    <HeaderSetAll label="Repeat" groups={repeatGroups(false)} onPick={(v) => setRows((list) => list.map((r) => (r.day ? r : { ...r, repeat: v as Repeat | "" })))} />
+                    <HeaderSetAll label="Repeat" groups={repeatGroups(false, planRepeat)} onPick={(v) => setRows((list) => list.map((r) => (r.day ? r : { ...r, repeat: v as Repeat | "" })))} />
                   ) : col.label}
                   {col.resizable && <ResizeHandle onResize={(w) => setWidth(c, w)} onReset={() => setWidth(c, SHEET_COLS[c].width)} width={widths[c]} label={col.label} />}
                 </th>
@@ -293,9 +297,10 @@ export function TaskSheet({ rows, setRows, clashes, neet = false }: { rows: Shee
             {rows.map((r, i) => (
               <tr key={r.key}>
                 <td className="border-b border-r border-overlay/10 bg-overlay/5 text-center text-xs tabular-nums text-ink-faint">{i + 1}</td>
-                <td className={TD}><TitleCell neet={neet} row={i} value={r.title} placeholder={i === 0 ? "e.g. Gym" : ""}
+                <td className={TD}><TitleCell neet={neet} entries={entries} row={i} value={r.title} placeholder={i === 0 ? "e.g. Gym" : ""}
                   onChange={(title) => update(r.key, { title })}
                   onPick={(x) => update(r.key, { title: syllabusTitle(x), ...(r.notes.trim() ? {} : { notes: syllabusNote(x) }) })}
+                  onPickEntry={(x) => update(r.key, { title: x.title, ...(r.notes.trim() || !x.notes ? {} : { notes: x.notes }), priority: x.priority, allDay: !x.startTime, ...(x.startTime && x.endTime ? { startTime: x.startTime, endTime: x.endTime } : {}) })}
                   onPaste={(e) => onPaste(e, i, 0)} onKeyDown={(e) => onKey(e, i, 0)} /></td>
                 <td className={TD}><input data-cell={`${i}-1`} value={r.notes} maxLength={2000} onChange={(e) => update(r.key, { notes: e.target.value })} onPaste={(e) => onPaste(e, i, 1)} onKeyDown={(e) => onKey(e, i, 1)} className={CELL} aria-label={`Row ${i + 1} notes`} /></td>
                 <td className={TD}>
@@ -313,7 +318,7 @@ export function TaskSheet({ rows, setRows, clashes, neet = false }: { rows: Shee
                   </td>
                 ))}
                 <td className={TD}>
-                  <CellSelect dataCell={`${i}-6`} value={r.day ? "" : r.repeat} display={r.day ? "Once" : repeatText(r.repeat)} groups={repeatGroups(!!r.day)} disabled={!!r.day} muted={!r.repeat}
+                  <CellSelect dataCell={`${i}-6`} value={r.day ? "" : r.repeat} display={r.day ? "Once" : r.repeat ? repeatText(r.repeat) : (planRepeat ?? "Plan's repeat")} groups={repeatGroups(!!r.day, planRepeat)} disabled={!!r.day} muted={!r.repeat}
                     title={r.day ? "A task with a Date is added on that day only" : undefined}
                     onSelect={(v) => update(r.key, { repeat: v as Repeat | "" })} onPaste={(e) => onPaste(e, i, 6)} onKeyDown={(e) => onKey(e, i, 6)} label={`Row ${i + 1} repeat`} />
                 </td>
@@ -453,9 +458,9 @@ function Marked({ text, q }: { text: string; q: string }) {
  * topics in a list below the cell; ↑ ↓ to move, Enter to pick, Esc to hide. Picking fills the title, and the notes
  * if they are empty. The list floats above the sheet so the table never cuts it off.
  */
-function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, onKeyDown }: {
-  neet: boolean;
-  row: number; value: string; placeholder: string; onChange: (v: string) => void; onPick: (x: SyllabusItem) => void;
+function TitleCell({ neet, entries, row, value, placeholder, onChange, onPick, onPickEntry, onPaste, onKeyDown }: {
+  neet: boolean; entries: Entry[];
+  row: number; value: string; placeholder: string; onChange: (v: string) => void; onPick: (x: SyllabusItem) => void; onPickEntry: (x: Entry) => void;
   onPaste: (e: React.ClipboardEvent) => void; onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -464,7 +469,10 @@ function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, o
   const [active, setActive] = useState(-1);
   const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
   const hits = useMemo(() => (open && neet ? searchSyllabus(value, 8) : []), [open, value, neet]);
-  const show = open && value.trim().length > 0 && hits.length > 0;
+  /** My own entries come first, then the syllabus. */
+  const found = useMemo(() => (open ? searchEntries(entries, value) : []), [open, value, entries]);
+  const total = found.length + hits.length;
+  const show = open && value.trim().length > 0 && total > 0;
   useEffect(() => setActive(-1), [value]);
 
   const place = () => {
@@ -483,6 +491,8 @@ function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, o
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (x: SyllabusItem) => { onPick(x); setOpen(false); input.current?.focus(); };
+  const pickEntry = (x: Entry) => { onPickEntry(x); setOpen(false); input.current?.focus(); };
+  const pickAt = (i: number) => (i < found.length ? pickEntry(found[i]) : pick(hits[i - found.length]));
 
   return (
     <>
@@ -493,19 +503,31 @@ function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, o
         onPaste={onPaste}
         onKeyDown={(e) => {
           if (show) {
-            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(hits.length - 1, a + 1)); return; }
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(total - 1, a + 1)); return; }
             if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); return; }
-            if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(hits[active]); return; }
+            if (e.key === "Enter" && active >= 0) { e.preventDefault(); pickAt(active); return; }
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); return; }
           }
           onKeyDown(e);
         }}
         className={CELL} />
       {show && pos && createPortal(
-        <ul ref={list} role="listbox" aria-label="NEET syllabus"
+        <ul ref={list} role="listbox" aria-label={neet ? "Your entries and the NEET syllabus" : "Your entries"}
           className="glass-in fixed z-[160] max-h-72 overflow-y-auto rounded-2xl border border-overlay/10 bg-canvas-raised p-1.5 shadow-themed"
           style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}>
-          {hits.map((x, i) => (
+          {found.map((x, i) => (
+            <li key={`entry-${x.id}`} role="option" aria-selected={i === active}>
+              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pickEntry(x)} onMouseEnter={() => setActive(i)}
+                className={cn("flex w-full items-start gap-3 rounded-xl px-3.5 py-2.5 text-left", i === active && "bg-overlay/[0.06]")}>
+                <History className="mt-[3px] h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium leading-snug text-ink"><Marked text={x.title} q={value} /></span>
+                  <span className="mt-0.5 block truncate text-xs text-ink-muted">{entryPath(x)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {hits.map((x, j) => { const i = found.length + j; return (
             <li key={syllabusKey(x)} role="option" aria-selected={i === active}>
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(x)} onMouseEnter={() => setActive(i)}
                 className={cn("flex w-full items-start gap-3 rounded-xl px-3.5 py-2.5 text-left", i === active && "bg-overlay/[0.06]")}>
@@ -516,7 +538,7 @@ function TitleCell({ neet, row, value, placeholder, onChange, onPick, onPaste, o
                 </span>
               </button>
             </li>
-          ))}
+          ); })}
         </ul>,
         document.body,
       )}

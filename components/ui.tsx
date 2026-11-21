@@ -38,14 +38,14 @@ const tones = {
   red: "bg-accent-extreme/15 text-accent-extreme",
   blue: "bg-accent-slow/15 text-accent-slow",
 };
-export function Badge({ tone = "neutral", children }: { tone?: keyof typeof tones; children: React.ReactNode }) {
-  return <span className={cn("inline-flex items-center rounded-none px-2.5 py-0.5 text-xs font-medium", tones[tone])}>{children}</span>;
+export function Badge({ tone = "neutral", children, className }: { tone?: keyof typeof tones; children: React.ReactNode; className?: string }) {
+  return <span className={cn("inline-flex items-center rounded-none px-2.5 py-0.5 text-xs font-medium", tones[tone], className)}>{children}</span>;
 }
 
-export function Stat({ label, value, hint, tone }: { label: string; value: number | string; hint?: string; tone?: "green" | "amber" | "red" | "blue" }) {
+export function Stat({ label, value, hint, tone, className }: { label: string; value: number | string; hint?: string; tone?: "green" | "amber" | "red" | "blue"; className?: string }) {
   const color = tone ? { green: "text-accent-medium", amber: "text-accent-fast", red: "text-accent-extreme", blue: "text-accent-slow" }[tone] : "text-ink";
   return (
-    <Card className="p-4 sm:p-5">
+    <Card className={cn("p-4 sm:p-5", className)}>
       <p className="text-sm text-ink-muted">{label}</p>
       <p className={cn("mt-1 font-display text-3xl", color)}>{value}</p>
       {hint && <p className="mt-1 text-xs text-ink-faint">{hint}</p>}

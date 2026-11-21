@@ -37,18 +37,44 @@ function presets(now: string): { label: string; from: string; to: string }[] {
   ];
 }
 
+/**
+ * Auto-save: what is typed in the planner (the rows and the When settings) is kept on this device as it changes,
+ * so closing the planner by mistake (Back, Esc, a tap outside) loses nothing. It comes back the next time the
+ * planner opens, and is cleared once the plan is added (or when every row is empty again).
+ */
+export const PLANNER_DRAFT_KEY = "pacewise-todo-planner-draft";
+interface Draft { rows: Omit<SheetRow, "key">[]; from: string; to: string; repeat: Repeat; picked: boolean[] }
+function loadDraft(now: string): Draft | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(PLANNER_DRAFT_KEY) ?? "null") as Draft | null;
+    if (!d || !Array.isArray(d.rows) || !d.rows.length) return null;
+    // A range that has started in the past moves to today (the planner never plans past days).
+    if (d.from < now) { d.to = d.to < now ? addDays(now, Math.max(0, span(d.from, d.to))) : d.to; d.from = now; }
+    return d;
+  } catch { return null; }
+}
+const clearDraft = () => { try { localStorage.removeItem(PLANNER_DRAFT_KEY); } catch { /* storage blocked */ } };
+
 export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () => void; onCreated: (tasks: Task[]) => void; neet?: boolean }) {
   const now = today();
   const quick = useMemo(() => presets(now), [now]);
-  const [from, setFrom] = useState(now);
-  const [to, setTo] = useState(addDays(now, 6));
-  const [repeat, setRepeat] = useState<Repeat>("daily");
-  const [picked, setPicked] = useState<boolean[]>([true, false, true, false, true, false, false]);
-  const [rows, setRows] = useState<SheetRow[]>(() => [blankRow(), blankRow(), blankRow()]);
+  const [draft] = useState(() => loadDraft(now));
+  const [from, setFrom] = useState(draft?.from ?? now);
+  const [to, setTo] = useState(draft?.to ?? addDays(now, 6));
+  const [repeat, setRepeat] = useState<Repeat>(draft?.repeat ?? "daily");
+  const [picked, setPicked] = useState<boolean[]>(draft?.picked?.length === 7 ? draft.picked : [true, false, true, false, true, false, false]);
+  const [rows, setRows] = useState<SheetRow[]>(() => draft ? draft.rows.map((r) => { const b = blankRow(); return { ...b, ...r, key: b.key }; }) : [blankRow(), blankRow(), blankRow()]);
+  /** Saved on every change; nothing is kept while every row is empty. */
+  const added = useRef(false);
+  useEffect(() => {
+    if (added.current) return;
+    if (!rows.some((r) => r.title.trim() || r.notes.trim())) { clearDraft(); return; }
+    const save: Draft = { rows: rows.map(({ key: _key, ...r }) => r), from, to, repeat, picked };
+    try { localStorage.setItem(PLANNER_DRAFT_KEY, JSON.stringify(save)); } catch { /* storage blocked */ }
+  }, [rows, from, to, repeat, picked]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BulkResult | null>(null);
-  const firstDayRef = useRef<HTMLInputElement>(null);
   /** "Custom dates" in the Range menu opens its own small popup with the first and last day. */
   const [customOpen, setCustomOpen] = useState(false);
   const preset = quick.find((p) => p.from === from && p.to === to);
@@ -97,7 +123,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
       const task = (r: SheetRow, day: string) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startDay: day, dueDay: day, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime });
       const tasks = [...repeating.flatMap((r) => daysFor(r).map((day) => task(r, day))), ...dated.map((r) => task(r, r.day))].sort((x, y) => x.startDay.localeCompare(y.startDay));
       const res = await createBulk(tasks);
-      if (res.created.length) onCreated(res.created);
+      if (res.created.length) { added.current = true; clearDraft(); onCreated(res.created); }
       if (res.skipped.length === 0) { onClose(); return; }
       setResult(res);
     } catch (e) {
@@ -155,10 +181,6 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
                       onSelect={(id) => setRepeat(id as Repeat)} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-5">
-                  <label className={LABEL}>First day<input ref={firstDayRef} type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
-                  <label className={LABEL}>Last day<input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={FIELD} /></label>
-                </div>
                 {repeat === "custom" && (
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Days of the week">
                     {WEEKDAYS.map((w, i) => (
@@ -174,7 +196,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
 
               {/* 2. Tasks */}
               <Section n={2} title="Tasks">
-                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} />
+                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)} />
               </Section>
 
               {/* 3. Preview */}

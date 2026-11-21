@@ -8,8 +8,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        {/* Before the page paints: the picked theme, or light on phones, so a phone never flashes dark first. */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var c=localStorage.getItem("pacewise-todo-theme-choice");document.documentElement.setAttribute("data-theme",c?c:(matchMedia("(max-width: 767px)").matches?"light":"dark"))}catch(e){}` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />

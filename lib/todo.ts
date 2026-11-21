@@ -43,6 +43,9 @@ export interface Summary {
 
 export interface DayDetail { day: string; minutes: number; created: Task[]; completed: Task[]; planned: Task[]; logs: WorkLog[] }
 
+/** A task title this person has added before (one per title), with what it was last added with. */
+export interface Entry { id: string; title: string; notes: string; priority: Priority; startTime: string | null; endTime: string | null; created: number; done: number; lastUsedAt: string }
+
 export interface TaskInput { title: string; notes: string; priority: Priority; startDay: string; dueDay: string; startTime: string | null; endTime: string | null }
 
 /** Every write sends the user's own day and time-zone offset; see backend/src/modules/todo. */
@@ -61,6 +64,8 @@ export const todoApi = {
   removeLog: (id: string) => api<void>(`/todo/logs/${encodeURIComponent(id)}`, { method: "DELETE", query: { today: today() } }),
   summary: () => api<Summary>("/todo/summary", { query: { today: today() } }),
   day: (day: string) => api<DayDetail>(`/todo/days/${day}`),
+  /** My entries; a backend from before entries has no /todo/entries (404): then there are none. */
+  entries: () => api<Entry[]>("/todo/entries").catch((e) => { if (e instanceof ApiError && e.status === 404) return [] as Entry[]; throw e; }),
 };
 
 export interface BulkResult { created: Task[]; skipped: { index: number; title: string; startDay: string; reason: string }[] }

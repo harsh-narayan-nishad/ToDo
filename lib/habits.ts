@@ -24,12 +24,14 @@ export interface Habit {
   /** 0 = Monday … 6 = Sunday. */
   days: number[];
   cue: string;
+  /** Optional time of day ("HH:MM"); null / missing = any time. */
+  time?: string | null;
   startDay: string;
   archived: boolean;
   createdAt: string;
 }
 export interface HabitEntry { id: string; habitId: string; day: string; value: number; bedTime: string | null; wakeTime: string | null; quality: number | null; note: string; skipped?: boolean }
-export interface HabitInput { name: string; kind: HabitKind; scale: HabitScale; category: HabitCategory; target: number; unit: string; days: number[]; cue: string }
+export interface HabitInput { name: string; kind: HabitKind; scale: HabitScale; category: HabitCategory; target: number; unit: string; days: number[]; cue: string; time?: string | null }
 
 export const KINDS: { id: HabitKind; label: string; hint: string }[] = [
   { id: "check", label: "Yes / no", hint: "Done or not, e.g. make the bed" },
