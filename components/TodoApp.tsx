@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { TabIcon, type TabIconName } from "@/components/TabIcons";
 import { NotificationBell } from "@/components/NotificationBell";
 import { WheelSpinner } from "@/components/WheelSpinner";
 import { LoginCard } from "@/components/LoginCard";
@@ -114,6 +115,15 @@ export function TodoApp() {
     if ((window.history.state as { todoTab?: Tab } | null)?.todoTab && window.history.length > 1) window.history.back();
     else setTab("tasks");
   }, []);
+  /** Phones get a bottom tab bar (sections, notifications, More); wider screens keep the bell and menu at the top. */
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   /** Phones: whether the page has scrolled (the top bar then shows its hairline). */
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -129,7 +139,22 @@ export function TodoApp() {
   if (!user) return <LoginCard onSignedIn={setUser} />;
 
   return (
-    <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
+    <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 max-md:pb-28 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
+      {/* Phones: an iOS tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
+      {phone && (
+        <nav aria-label="Sections" className="ios-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          {TABS.filter((t) => t.id !== "profile").map(({ id, label }) => (
+            <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
+              className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#007AFF" : "#8E8E93" }}>
+              <TabIcon name={id as TabIconName} active={tab === id} />
+              {label}
+            </button>
+          ))}
+          <NotificationBell tab refreshKey={refreshKey + version} onNavigate={setTab} />
+          <HamburgerMenu tab tabActive={tab === "profile" || tab === "history"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+            sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
+        </nav>
+      )}
       {/* Phones: the greeting bar stays on top like an iOS navigation bar (frosted; a hairline once the page scrolls). */}
       <aside data-scrolled={scrolled || undefined} className="ios-navbar flex shrink-0 flex-col gap-6 max-md:sticky max-md:top-0 max-md:z-40 max-md:-mx-4 max-md:-mt-6 max-md:px-4 max-md:pb-3 max-md:pt-[max(1.25rem,env(safe-area-inset-top))] sm:max-md:-mx-6 sm:max-md:px-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
         <div className="relative flex items-center justify-between">
@@ -140,12 +165,14 @@ export function TodoApp() {
             <p className="text-sm text-ink-muted">{dueNow === null ? "Here is your day" : dueNow > 0 ? "You have work today" : "Nothing due today"}</p>
           </div>
           {/* The Pacewise-style hamburger menu: History, theme, and the account with Log out. */}
-          <div className="flex items-center gap-2">
-            {/* Missed tasks, today's tasks and habit status. */}
-            <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
-            <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
-              sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
-          </div>
+          {!phone && (
+            <div className="flex items-center gap-2">
+              {/* Missed tasks, today's tasks and habit status. */}
+              <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
+              <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+                sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
+            </div>
+          )}
         </div>
         {/* Phones: these tabs are in the hamburger menu. */}
         <nav className="hidden gap-1 overflow-x-auto md:flex md:flex-col" aria-label="Sections">
@@ -177,7 +204,7 @@ export function TodoApp() {
           )}
           <h1 className="font-display text-3xl">{tab === "history" ? "History" : TABS.find((t) => t.id === tab)?.label}.</h1>
         </div>
-        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} onDueNow={setDueNow} />}
+        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} onDueNow={setDueNow} onOpenCalendar={() => setTab("calendar")} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
         {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}

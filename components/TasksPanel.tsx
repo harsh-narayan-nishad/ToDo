@@ -15,6 +15,7 @@ import { earliestStart, lockedProblem, planProblem, titleProblem } from "@/lib/r
 import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
 import { taskCounts } from "@/components/CountCards";
+import { loadEvents, type CalendarItem } from "@/lib/calendar/events";
 import { todoApi, type Entry, type Priority, type Task } from "@/lib/todo";
 import { entryPath, searchEntries, useEntries } from "@/lib/entries";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 /** `neet` = the signed-in user is preparing for NEET: task titles then also search the NEET syllabus and NCERT chapters. */
-export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false, onDueNow }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean; onDueNow?: (n: number) => void }) {
+export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false, onDueNow, onOpenCalendar }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean; onDueNow?: (n: number) => void; onOpenCalendar?: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
@@ -38,7 +39,19 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   const [planning, setPlanning] = useState(false);
   const [overview, setOverview] = useState(false);
 
+  /**
+   * Today's own calendar events (added in the Calendar or in Pacewise, not To-do tasks): shown here too, so everything
+   * planned for today is on the home screen. To-do's own copies ("todo-…", "todolog-…") are left out (they are the tasks).
+   */
+  const [calToday, setCalToday] = useState<CalendarItem[]>([]);
   const load = useCallback(async () => {
+    void loadEvents("").then((all) => {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const end = new Date(start); end.setDate(end.getDate() + 1);
+      setCalToday(all
+        .filter((e) => !e.id.startsWith("todo-") && !e.id.startsWith("todolog-") && new Date(e.start) < end && new Date(e.end) > start)
+        .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start)));
+    }, () => undefined);
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
@@ -92,7 +105,10 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
 
   /** For the phone greeting ("You have work today"). */
   const counts = useMemo(() => taskCounts(tasks ?? [], now), [tasks, now]);
-  useEffect(() => { if (tasks) onDueNow?.(counts.today + counts.overdue); }, [tasks, counts, onDueNow]);
+  useEffect(() => { if (tasks) onDueNow?.(counts.today + counts.overdue + calToday.length); }, [tasks, counts, calToday, onDueNow]);
+  /** Today's calendar events, under To do and All (not under Done: they have no done state). */
+  const showCal = filter !== "done" && calToday.length > 0;
+  const calSection = showCal ? <CalendarToday key="calendar" events={calToday} onOpen={onOpenCalendar} /> : null;
 
   const habitsSection = <TaskHabits key="habits" refreshKey={refreshKey} onlyDone={filter === "done"} onChanged={onChanged} onOpenHabits={onOpenHabits} />;
 
@@ -120,11 +136,11 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
       {tasks === null && !error && <PanelLoader label="Loading tasks" />}
-      {tasks !== null && groups.length === 0 && <Empty>{filter === "done" ? "Nothing finished yet." : filter === "open" && upcomingCount > 0 ? `Nothing due today. ${upcomingCount} upcoming task${upcomingCount === 1 ? " is" : "s are"} under All.` : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
+      {tasks !== null && groups.length === 0 && !showCal && <Empty>{filter === "done" ? "Nothing finished yet." : filter === "open" && upcomingCount > 0 ? `Nothing due today. ${upcomingCount} upcoming task${upcomingCount === 1 ? " is" : "s are"} under All.` : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
 
       {groups.flatMap((g, i) => [
         // Today's habits sit right after the tasks for now (Overdue, Today), before Upcoming and Done.
-        ...((g.key === "upcoming" || g.key === "done") && (i === 0 || groups[i - 1].key === "overdue" || groups[i - 1].key === "today") ? [habitsSection] : []),
+        ...((g.key === "upcoming" || g.key === "done") && (i === 0 || groups[i - 1].key === "overdue" || groups[i - 1].key === "today") ? [calSection, habitsSection] : []),
         <section key={g.key}>
           <h2 className={cn("mb-3 text-sm uppercase tracking-wide", g.key === "overdue" ? "text-accent-extreme" : "text-ink-muted")}>
             {/* Phones: "Today's Task" style headings. */}
@@ -139,6 +155,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           {g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.key, g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={(n) => setPages((cur) => ({ ...cur, [g.key]: n }))} /></div>}
         </section>,
       ])}
+      {tasks !== null && !groups.some((g) => g.key === "upcoming" || g.key === "done") && calSection}
       {tasks !== null && !groups.some((g) => g.key === "upcoming" || g.key === "done") && habitsSection}
 
       {overview && <TaskOverview tasks={tasks ?? []} onClose={() => setOverview(false)} />}
@@ -233,6 +250,39 @@ function planned(t: Task): number | null {
   return total > 0 ? total : null;
 }
 
+/** Today's own calendar events, as cards like the tasks (time and length on top); a tap opens the Calendar. */
+function CalendarToday({ events, onOpen }: { events: CalendarItem[]; onOpen?: () => void }) {
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const when = (e: CalendarItem) => {
+    if (e.allDay) return "All day";
+    const s = new Date(e.start);
+    const mins = Math.round((new Date(e.end).getTime() - s.getTime()) / 60_000);
+    return `${clock(hhmm(s))}${mins > 0 ? ` · ${duration(mins)}` : ""}`;
+  };
+  return (
+    <section>
+      <h2 className="mb-3 text-sm uppercase tracking-wide text-ink-muted">
+        <span className="text-lg font-medium normal-case tracking-normal text-ink md:hidden">From your calendar <span className="text-sm font-normal text-ink-faint">{events.length}</span></span>
+        <span className="hidden md:inline">From your calendar · {events.length}</span>
+      </h2>
+      <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
+        {events.map((e) => (
+          <li key={e.id}>
+            <button type="button" onClick={onOpen} className="ios-card flex w-full items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 text-left md:rounded-none md:bg-transparent md:px-5 md:py-4">
+              <span className="ml-1 mt-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-[7px] bg-[#007AFF] text-white"><CalendarDays className="h-4 w-4" aria-hidden /></span>
+              <span className="min-w-0 flex-1 pt-1">
+                <span className="flex items-center gap-1 text-[13px] text-ink-muted"><Timer className="h-3.5 w-3.5" aria-hidden />{when(e)}</span>
+                <span className="mt-1 block break-words text-[17px] leading-snug text-ink md:text-base">{e.title}</span>
+                <span className="mt-1 block text-xs text-ink-faint">In your calendar · tap to open</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** Phones: the ⋯ on a task card, with Log time, Edit and Delete. */
 function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
@@ -257,7 +307,7 @@ function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () =
 function PlanButton({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-label="Plan tasks for many days" title="Plan tasks for many days"
-      className="glass-fab fixed bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+5rem)] right-5 z-40 inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-[7.5rem] md:right-10">
+      className="glass-fab fixed bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+5rem)] max-md:bottom-[calc(10rem+env(safe-area-inset-bottom))] right-5 z-40 inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-[7.5rem] md:right-10">
       <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={24} blur={4} /></span>
       <CalendarRange className="relative h-5 w-5" strokeWidth={1.75} aria-hidden />
       <span className="relative">Plan tasks</span>
@@ -269,7 +319,7 @@ function PlanButton({ onClick }: { onClick: () => void }) {
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-label="Add task" title="Add task"
-      className="glass-fab fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-5 z-40 grid h-16 w-16 place-items-center rounded-full text-ink max-md:bg-[#3478F6] max-md:text-white max-md:shadow-themed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-10 md:right-10">
+      className="glass-fab fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(5rem+env(safe-area-inset-bottom))] right-5 z-40 grid h-16 w-16 place-items-center rounded-full text-ink max-md:bg-[#3478F6] max-md:text-white max-md:shadow-themed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-10 md:right-10">
       <span className="absolute inset-0 max-md:hidden" aria-hidden><LiquidGlass width="100%" height="100%" radius={32} blur={4} /></span>
       <Plus className="relative h-7 w-7 max-md:h-8 max-md:w-8" strokeWidth={1.75} aria-hidden />
     </button>

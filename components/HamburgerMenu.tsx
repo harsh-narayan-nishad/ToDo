@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, History, Menu, Moon, Palette, Sun, X } from "lucide-react";
+import { Check, ChevronRight, History, Menu, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
 import type { User } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { TabIcon } from "@/components/TabIcons";
 
 /** iOS Settings-style pieces: a rounded group of rows, and one row (coloured icon tile, label, value, chevron or tick). */
 function Group({ title, children }: { title?: string; children: React.ReactNode }) {
@@ -39,10 +40,12 @@ const TINT: Record<string, string> = { tasks: "#007AFF", habits: "#34C759", prof
  * right over a dimmed page. Laid out like iOS Settings: the account on top, then rounded groups of rows (the
  * sections on phones; History and Theme), and Log out on its own.
  */
-export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection }: {
+export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false }: {
   user: User; light: boolean; setLight: (v: boolean) => void; onHistory: () => void; onSignOut: () => void;
   /** Phones only: the section tabs (Tasks, Habits, Profile, Calendar) live in this menu instead of on the page. */
   sections?: { id: string; label: string; icon: typeof Menu }[]; current?: string; onSection?: (id: string) => void;
+  /** Phones: shown as the "More" item of the bottom tab bar; `tabActive` when the open section lives in this menu. */
+  tab?: boolean; tabActive?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -64,10 +67,19 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
 
   return (
     <>
+      {tab ? (
+        <button type="button" onClick={() => setOpen(true)} aria-label="More" aria-haspopup="dialog"
+          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tabActive || open ? "#007AFF" : "#8E8E93" }}>
+          <TabIcon name="more" active={tabActive || open} />
+          More
+        </button>
+      ) : (
       <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" aria-haspopup="dialog"
-        className="ios-circle-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink transition-transform active:scale-95">
-        <Menu className="h-[18px] w-[18px]" strokeWidth={1.9} />
+        className="ios-circle-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#007AFF] transition-transform active:scale-95">
+        {/* iOS "more" button: three dots in system blue */}
+        <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={2.25} />
       </button>
+      )}
 
       {mounted && open && createPortal(
         <>

@@ -6,6 +6,7 @@ import { addDays, clock, dayLabel, today } from "@/lib/days";
 import { todoApi, type Task } from "@/lib/todo";
 import { currentStreak, habitApi, indexEntries, isDone, isPlanned, isSkipped, type EntryIndex, type Habit } from "@/lib/habits";
 import { cn } from "@/lib/utils";
+import { TabIcon } from "@/components/TabIcons";
 
 type Tone = "red" | "amber" | "blue" | "neutral";
 interface Note { id: string; tone: Tone; icon: typeof Bell; message: string; detail: string; tab: "tasks" | "habits" }
@@ -75,7 +76,7 @@ function build(tasks: Task[], habits: Habit[], index: EntryIndex, now: string, m
  * tasks, today's tasks (and ones starting within the hour), habits left today, streaks at risk, sleep to log, and
  * habits missed yesterday. Click one to open its section. Mark all read / clear one; remembered on this device.
  */
-export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: number; onNavigate: (tab: "tasks" | "habits") => void }) {
+export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refreshKey: number; onNavigate: (tab: "tasks" | "habits") => void; /** Phones: shown as an item of the bottom tab bar (the panel opens upwards). */ tab?: boolean }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [index, setIndex] = useState<EntryIndex>(new Map());
@@ -84,7 +85,7 @@ export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: numbe
   const [tick, setTick] = useState(0);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
 
   useEffect(() => setSeen(loadSeen()), []);
   const load = useCallback(async () => {
@@ -112,7 +113,9 @@ export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: numbe
     const r = button.current?.getBoundingClientRect();
     if (!r) return;
     const width = Math.min(360, window.innerWidth - 24);
-    setPos({ top: r.bottom + 8, width, left: Math.max(12, Math.min(r.right - width, window.innerWidth - width - 12)) });
+    const left = Math.max(12, Math.min(r.right - width, window.innerWidth - width - 12));
+    // In the bottom tab bar: open above it.
+    setPos(r.top > window.innerHeight / 2 ? { bottom: window.innerHeight - r.top + 8, width, left } : { top: r.bottom + 8, width, left });
   };
   useLayoutEffect(() => { if (open) place(); }, [open]);
   useEffect(() => {
@@ -128,17 +131,28 @@ export function NotificationBell({ refreshKey, onNavigate }: { refreshKey: numbe
 
   return (
     <>
+      {tab ? (
+        <button ref={button} type="button" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
+          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: open ? "#007AFF" : "#8E8E93" }}>
+          <span className="relative">
+            <TabIcon name="alerts" active={open} />
+            {unread > 0 && <span className="absolute -right-2.5 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[10px] font-semibold leading-none text-white">{unread > 9 ? "9+" : unread}</span>}
+          </span>
+          Alerts
+        </button>
+      ) : (
       <button ref={button} type="button" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
-        className="ios-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink transition-transform active:scale-95">
+        className="ios-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#007AFF] transition-transform active:scale-95">
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {unread > 0 && (
           <span className="absolute -right-1 -top-1 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-canvas">{unread > 9 ? "9+" : unread}</span>
         )}
       </button>
+      )}
       {open && pos && createPortal(
         // Like iOS Notification Centre: a blurred backdrop, a bold title, and each notification on its own frosted card.
         <div ref={panel} role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
-          style={{ top: pos.top, left: pos.left, width: pos.width }}>
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
           <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
             <span className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Notifications</span>
             {unread > 0 && (
