@@ -13,7 +13,8 @@ import { lateFinishAllowed, lockedProblem } from "@/lib/rules";
 import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
 import { taskCounts } from "@/components/CountCards";
-import { loadEvents, type CalendarItem } from "@/lib/calendar/events";
+import { tourTasks } from "@/lib/tour";
+import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 
@@ -61,9 +62,18 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       setCelebrating((s) => new Set(s).add(t.id));
       try { navigator.vibrate?.(12); } catch { /* not supported */ }
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // The tour's practice task: ticking it off deletes it for good (it does not go to Done).
+      const practice = tourTasks.has(t.title);
       try {
-        const [saved] = await Promise.all([todoApi.update(t.id, { status }), new Promise((r) => setTimeout(r, reduced ? 200 : 750))]);
-        replace(saved);
+        const wait = new Promise((r) => setTimeout(r, reduced ? 200 : 750));
+        if (practice) {
+          await Promise.all([todoApi.remove(t.id), wait]);
+          tourTasks.delete(t.title);
+          setTasks((list) => (list ?? []).filter((x) => x.id !== t.id));
+        } else {
+          const [saved] = await Promise.all([todoApi.update(t.id, { status }), wait]);
+          replace(saved);
+        }
         onChanged();
       } catch (e) { setError(e instanceof Error ? e.message : "Could not update."); }
       finally { setCelebrating((s) => { const n = new Set(s); n.delete(t.id); return n; }); }
@@ -99,10 +109,32 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
 
   /** For the phone greeting ("You have work today"). */
   const counts = useMemo(() => taskCounts(tasks ?? [], now), [tasks, now]);
-  useEffect(() => { if (tasks) onDueNow?.(counts.today + counts.overdue + calToday.length); }, [tasks, counts, calToday, onDueNow]);
-  /** Today's calendar events, under To do and All (not under Done: they have no done state). */
-  const showCal = filter !== "done" && calToday.length > 0;
-  const calSection = showCal ? <CalendarToday key="calendar" events={calToday} onOpen={onOpenCalendar} /> : null;
+  /** A calendar event ticked off here is marked done in the calendar itself ("✓ " title, outline style), like a finished task. */
+  const evDone = (e: CalendarItem) => e.title.startsWith("✓ ");
+  const [calCelebrating, setCalCelebrating] = useState<Set<string>>(new Set());
+  useEffect(() => { if (tasks) onDueNow?.(counts.today + counts.overdue + calToday.filter((e) => !evDone(e)).length); }, [tasks, counts, calToday, onDueNow]);
+  async function toggleEvent(e: CalendarItem) {
+    const finishing = !evDone(e);
+    const next: CalendarItem = finishing ? { ...e, title: `✓ ${e.title}`, variant: "outline" } : { ...e, title: e.title.replace(/^✓ /, ""), variant: "primary" };
+    try {
+      if (finishing) {
+        if (calCelebrating.has(e.id)) return;
+        setCalCelebrating((s) => new Set(s).add(e.id));
+        try { navigator.vibrate?.(12); } catch { /* not supported */ }
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        await Promise.all([changeEvent("", e.id, { title: next.title, variant: next.variant }), new Promise((r) => setTimeout(r, reduced ? 200 : 750))]);
+      } else {
+        await changeEvent("", e.id, { title: next.title, variant: next.variant });
+      }
+      setCalToday((list) => list.map((x) => (x.id === e.id ? next : x)));
+      onChanged();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not update."); }
+    finally { setCalCelebrating((s) => { if (!s.has(e.id)) return s; const n = new Set(s); n.delete(e.id); return n; }); }
+  }
+  /** Today's calendar events: open ones under To do, ticked-off ones under Done, all under All. */
+  const calShown = calToday.filter((e) => filter === "all" || (filter === "done" ? evDone(e) : !evDone(e) || calCelebrating.has(e.id)));
+  const showCal = calShown.length > 0;
+  const calSection = showCal ? <CalendarToday key="calendar" events={calShown} onOpen={onOpenCalendar} onToggle={(e) => void toggleEvent(e)} celebrating={calCelebrating} /> : null;
 
   const habitsSection = <TaskHabits key="habits" refreshKey={refreshKey} onlyDone={filter === "done"} onChanged={onChanged} onOpenHabits={onOpenHabits} />;
 
@@ -187,7 +219,7 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
   const lateOk = !celebrating && lateFinishAllowed(t, today());
   const tickTitle = lateOk ? "Overdue since yesterday: you can still tick it done today" : (locked ?? undefined);
   return (
-    <li className={cn(celebrating && "task-done-out")}>
+    <li data-task-title={t.title} className={cn(celebrating && "task-done-out")}>
       {/* Phones: a rounded card with a round check, the day and time on top, and a ⋯ menu. */}
       <div className="ios-card flex items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:hidden">
         <button onClick={onToggle} disabled={!!locked && !lateOk && !celebrating} title={tickTitle} aria-label={done ? "Mark as not done" : "Mark as done"}
@@ -247,7 +279,7 @@ function planned(t: Task): number | null {
 }
 
 /** Today's own calendar events, as cards like the tasks (time and length on top); a tap opens the Calendar. */
-function CalendarToday({ events, onOpen }: { events: CalendarItem[]; onOpen?: () => void }) {
+function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: CalendarItem[]; onOpen?: () => void; onToggle: (e: CalendarItem) => void; celebrating: Set<string> }) {
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const when = (e: CalendarItem) => {
     if (e.allDay) return "All day";
@@ -262,18 +294,26 @@ function CalendarToday({ events, onOpen }: { events: CalendarItem[]; onOpen?: ()
         <span className="hidden md:inline">From your calendar · {events.length}</span>
       </h2>
       <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
-        {events.map((e) => (
-          <li key={e.id}>
-            <button type="button" onClick={onOpen} className="ios-card flex w-full items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 text-left md:rounded-none md:bg-transparent md:px-5 md:py-4">
-              <span className="ml-1 mt-1.5 grid h-7 w-7 shrink-0 place-items-center rounded-[7px] bg-[#007AFF] text-white"><CalendarDays className="h-4 w-4" aria-hidden /></span>
-              <span className="min-w-0 flex-1 pt-1">
-                <span className="flex items-center gap-1 text-[13px] text-ink-muted"><Timer className="h-3.5 w-3.5" aria-hidden />{when(e)}</span>
-                <span className="mt-1 block break-words text-[17px] leading-snug text-ink md:text-base">{e.title}</span>
-                <span className="mt-1 block text-xs text-ink-faint">In your calendar · tap to open</span>
-              </span>
-            </button>
-          </li>
-        ))}
+        {events.map((e) => {
+          const party = celebrating.has(e.id);
+          const done = e.title.startsWith("✓ ") || party;
+          return (
+            <li key={e.id} className={cn(party && "task-done-out")}>
+              <div className="ios-card flex w-full items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:rounded-none md:bg-transparent md:px-5 md:py-4">
+                {/* The same tick box as a task: ticking marks the event done in the calendar. */}
+                <button type="button" onClick={() => onToggle(e)} aria-label={done ? "Mark as not done" : "Mark as done"}
+                  className={cn("ml-1.5 mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 md:ml-0 md:mt-1", done ? "border-ink bg-ink text-canvas" : "border-overlay/30", party && "check-burst")}>
+                  {done && <Check className={cn("h-3.5 w-3.5", party && "check-pop")} strokeWidth={3} />}
+                </button>
+                <button type="button" onClick={onOpen} className="min-w-0 flex-1 pt-2 text-left md:pt-0">
+                  <span className="flex items-center gap-1 text-[13px] text-ink-muted"><Timer className="h-3.5 w-3.5" aria-hidden />{when(e)}</span>
+                  <span className={cn("mt-1 block break-words text-[17px] leading-snug md:text-base", done ? "text-ink-faint line-through" : "text-ink")}>{e.title.replace(/^✓ /, "")}</span>
+                  <span className="mt-1 flex items-center gap-1 text-xs text-ink-faint"><CalendarDays className="h-3 w-3" aria-hidden />In your calendar · tap to open</span>
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -302,7 +342,7 @@ function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () =
 /** The floating + in liquid glass, bottom right; opens the task planner. */
 function AddButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} aria-label="Add tasks" title="Add tasks"
+    <button type="button" data-tour="add" onClick={onClick} aria-label="Add tasks" title="Add tasks"
       className="glass-fab fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] max-md:bottom-[calc(5rem+env(safe-area-inset-bottom))] right-5 z-40 grid h-14 w-14 place-items-center rounded-full text-ink max-md:bg-[#3478F6] max-md:text-white max-md:shadow-themed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium sm:right-8 md:bottom-10 md:right-10">
       <span className="absolute inset-0 max-md:hidden" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
       <Plus className="relative h-6 w-6" strokeWidth={2.25} aria-hidden />

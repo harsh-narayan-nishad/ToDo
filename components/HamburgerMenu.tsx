@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, History, Menu, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
+import { Check, ChevronRight, Compass, History, Menu, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
 import type { User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TabIcon } from "@/components/TabIcons";
@@ -40,12 +40,14 @@ const TINT: Record<string, string> = { tasks: "#007AFF", habits: "#34C759", prof
  * right over a dimmed page. Laid out like iOS Settings: the account on top, then rounded groups of rows (the
  * sections on phones; History and Theme), and Log out on its own.
  */
-export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false }: {
+export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false, onTour }: {
   user: User; light: boolean; setLight: (v: boolean) => void; onHistory: () => void; onSignOut: () => void;
   /** Phones only: the section tabs (Tasks, Habits, Profile, Calendar) live in this menu instead of on the page. */
   sections?: { id: string; label: string; icon: typeof Menu }[]; current?: string; onSection?: (id: string) => void;
   /** Phones: shown as the "More" item of the bottom tab bar; `tabActive` when the open section lives in this menu. */
   tab?: boolean; tabActive?: boolean;
+  /** "Take the tour": the guided tour that adds a first task. */
+  onTour?: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -115,6 +117,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
               )}
 
               <Group title="Your To-do">
+                {onTour && <Row icon={Compass} tint="#34C759" label="Take the tour" onClick={() => { close(); onTour(); }} />}
                 {/* History lives here instead of in the section tabs. */}
                 <Row icon={History} tint="#FF9500" label="History" onClick={() => { onHistory(); close(); }} />
                 <Row icon={Palette} tint="#5856D6" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}

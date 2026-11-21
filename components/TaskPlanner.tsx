@@ -156,7 +156,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
               {/* 1. When */}
               <Section n={1} title="When">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <div>
+                  <div data-tour="range">
                     <p className={cn(LABEL, "mb-2")}>Range</p>
                     <GlassDropdown label="Range" value={preset?.label ?? "custom"} display={preset ? `${preset.label} · ${short(from)} – ${short(to)}` : `Custom · ${short(from)} – ${short(to)}`}
                       groups={[
@@ -174,7 +174,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
                       </ClockPopup>
                     )}
                   </div>
-                  <div>
+                  <div data-tour="repeat">
                     <p className={cn(LABEL, "mb-2")}>Repeat</p>
                     <GlassDropdown label="Repeat" value={repeat} display={repeatLabel(repeat)}
                       groups={[{ title: "Pattern", items: PATTERNS }, { title: "Interval", items: INTERVALS.map((x) => ({ ...x, meta: `${planDays(from, to, x.id, picked).length} days` })) }]}
@@ -200,6 +200,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
               </Section>
 
               {/* 3. Preview */}
+              <div data-tour="preview">
               <Section n={3} title="Preview">
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   <p className="font-display text-3xl">{total} <span className="text-base text-ink-muted">task{total === 1 ? "" : "s"}</span></p>
@@ -211,11 +212,12 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
                 </div>
                 {allDays.length > 0 && <MonthsPreview from={allDays[0] < from ? allDays[0] : from} to={allDays[allDays.length - 1] > to ? allDays[allDays.length - 1] : to} days={allDays} />}
               </Section>
+              </div>
 
               {(problem || error) && <p className="text-sm text-accent-extreme" role="alert">{error ?? problem}</p>}
               <div className="sticky -bottom-6 -mx-6 -mb-6 flex justify-end gap-2 bg-gradient-to-t from-canvas-raised via-canvas-raised/90 to-transparent px-6 pb-6 pt-8 sm:-bottom-8 sm:-mx-8 sm:-mb-8 sm:px-8 sm:pb-8">
                 <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
-                <GlassButton type="button" onClick={() => void submit()} disabled={busy || !!problem} strong>
+                <GlassButton type="button" data-tour="planner-add" onClick={() => void submit()} disabled={busy || !!problem} strong>
                   {busy ? <ButtonWheel /> : <Check className="h-4 w-4" />}{busy ? "Adding…" : `Add ${total} task${total === 1 ? "" : "s"}`}
                 </GlassButton>
               </div>

@@ -136,7 +136,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
   return (
     <>
       {tab ? (
-        <button ref={button} type="button" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
+        <button ref={button} type="button" data-tour="alerts" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
           className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: open ? "#007AFF" : "#8E8E93" }}>
           <span className="relative">
             <TabIcon name="alerts" active={open} />
@@ -145,7 +145,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
           Alerts
         </button>
       ) : (
-      <button ref={button} type="button" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
+      <button ref={button} type="button" data-tour="alerts" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
         className="ios-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#007AFF] transition-transform active:scale-95">
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {unread > 0 && (
@@ -158,7 +158,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
         {/* The page behind dims (no blur) so it does not distract; a tap there only closes the panel. */}
         <div ref={dim} className="notif-dim fade-in fixed inset-0 z-[115]" aria-hidden onClick={() => setOpen(false)} />
         // Like iOS Notification Centre: a blurred backdrop, a bold title, and each notification on its own frosted card.
-        <div ref={panel} role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
+        <div ref={panel} data-tour="alerts-panel" role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
           style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
           <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
             <span className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Notifications</span>

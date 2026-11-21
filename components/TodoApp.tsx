@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
+import { Tour } from "@/components/Tour";
 import { TabIcon, type TabIconName } from "@/components/TabIcons";
 import { NotificationBell } from "@/components/NotificationBell";
 import { WheelSpinner } from "@/components/WheelSpinner";
@@ -124,6 +125,8 @@ export function TodoApp() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
+  /** The guided tour (More → Take the tour). */
+  const [touring, setTouring] = useState(false);
   /** Open tasks due now (today + overdue), for the phone greeting; null until the task list has loaded. */
   const [dueNow, setDueNow] = useState<number | null>(null);
 
@@ -133,8 +136,9 @@ export function TodoApp() {
   return (
     <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 max-md:pb-28 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
       {/* Phones: an iOS tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
+      {touring && <Tour onClose={() => setTouring(false)} goTasks={() => setTab("tasks")} />}
       {phone && (
-        <nav aria-label="Sections" className="ios-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        <nav aria-label="Sections" data-tour="tabs" className="ios-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {(["tasks", "habits", "calendar", "profile"] as Tab[]).map((id) => TABS.find((t) => t.id === id)!).map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
               className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#007AFF" : "#8E8E93" }}>
@@ -143,7 +147,7 @@ export function TodoApp() {
             </button>
           ))}
           <HamburgerMenu tab tabActive={tab === "history"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
-            sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
+            sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTouring(true)} />
         </nav>
       )}
       <aside className="flex shrink-0 flex-col gap-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
@@ -162,12 +166,12 @@ export function TodoApp() {
               {/* Missed tasks, today's tasks and habit status. */}
               <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
               <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
-                sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
+                sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTouring(true)} />
             </div>
           )}
         </div>
         {/* Phones: these tabs are in the hamburger menu. */}
-        <nav className="hidden gap-1 overflow-x-auto md:flex md:flex-col" aria-label="Sections">
+        <nav data-tour="tabs" className="hidden gap-1 overflow-x-auto md:flex md:flex-col" aria-label="Sections">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
               className={cn("flex items-center gap-3 whitespace-nowrap rounded-none px-4 py-2 text-sm transition-colors", tab === id ? "bg-ink text-canvas" : "text-ink-muted  ")}>

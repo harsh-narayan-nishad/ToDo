@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
  */
 export type CalendarVariant = "primary" | "secondary" | "outline";
 export interface CalendarItem { id: string; title: string; start: string; end: string; allDay: boolean; variant: CalendarVariant }
-export interface CalendarEventInput { title?: string; start?: string; end?: string; allDay?: boolean; variant?: CalendarVariant }
+export interface CalendarEventInput { title?: string; start?: string; end?: string; allDay?: boolean; variant?: CalendarVariant; /** New entries become To-do tasks on the user's own days. */ tzOffset?: number }
 
 const path = (id: string) => `/calendar/events/${encodeURIComponent(id)}`;
 

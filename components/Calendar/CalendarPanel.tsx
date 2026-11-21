@@ -106,7 +106,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
     const title = draft.title.trim();
     const start = new Date(draft.start);
     const end = new Date(draft.end);
-    if (!title) return setError("Give the event a title.");
+    if (!title) return setError("Give the task a title.");
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return setError("Choose a start and an end time.");
     if (end.getTime() < start.getTime()) return setError("The end must not be before the start.");
     const payload = { title, start: start.toISOString(), end: end.toISOString(), allDay: draft.allDay, variant: draft.variant };
@@ -115,8 +115,10 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
       void sync(changeEvent(userId, draft.id, payload));
     } else {
       let created;
-      try { created = await addEvent(userId, payload); } catch (e) { return setError(e instanceof Error ? e.message : "Could not create the event."); }
+      // What is added in the calendar is a To-do task (the server creates the task; the calendar shows it as "☐ …").
+      try { created = await addEvent(userId, { ...payload, tzOffset: new Date().getTimezoneOffset() }); } catch (e) { return setError(e instanceof Error ? e.message : "Could not add the task."); }
       setEvents((list) => [...(list ?? []), { ...created, start: new Date(created.start), end: new Date(created.end) }]);
+      onChanged?.();
     }
     setDraft(null);
   };
@@ -146,7 +148,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
     <>
       <Card className="ios-card rounded-[32px] bg-canvas-raised p-4 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
-          <button type="button" aria-label="New event" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
+          <button type="button" aria-label="New task" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
             <Plus className="h-4 w-4" />
           </button>
           <div role="tablist" aria-label="Calendar view" className="flex rounded-full bg-overlay/[0.07] p-1">
@@ -195,22 +197,23 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
 
       {draft && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setDraft(null); }}>
-          <div role="dialog" aria-modal="true" aria-label={draft.id ? "Edit event" : "New event"} className="w-full max-w-md rounded-[28px] border border-overlay/10 bg-canvas-raised p-6 shadow-themed sm:p-8">
+          <div role="dialog" aria-modal="true" aria-label={draft.id ? "Edit task" : "New task"} className="w-full max-w-md rounded-[28px] border border-overlay/10 bg-canvas-raised p-6 shadow-themed sm:p-8">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="font-display text-2xl tracking-[-0.02em] text-ink">{draft.id ? "Edit event" : "New event"}</h3>
+              <h3 className="font-display text-2xl tracking-[-0.02em] text-ink">{draft.id ? "Edit task" : "New task"}</h3>
               <button type="button" aria-label="Close" onClick={() => setDraft(null)} className="rounded-full p-1.5 text-ink-muted transition-colors hover:bg-overlay/5 hover:text-ink"><X className="h-4 w-4" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); void save(); }} className="flex flex-col gap-4">
               <label className="block"><span className={LABEL}>Title</span>
-                <input autoFocus value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={120} placeholder="Event title" className={FIELD} />
+                <input autoFocus value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} maxLength={120} placeholder="Task title" className={FIELD} />
               </label>
-              <label className="block"><span className={LABEL}>Style</span>
+              {/* A task's look follows its state (☐ open, ✓ done); only older calendar entries keep a style to pick. */}
+              {draft.id && !draft.id.startsWith("todo") && <label className="block"><span className={LABEL}>Style</span>
                 <select value={draft.variant} onChange={(e) => setDraft({ ...draft, variant: e.target.value as CalendarVariant })} className={FIELD}>
                   <option value="primary">Blue</option>
                   <option value="secondary">Purple</option>
                   <option value="outline">Outline</option>
                 </select>
-              </label>
+              </label>}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label className="block"><span className={LABEL}>Starts</span>
                   <input type="datetime-local" value={draft.start} onChange={(e) => setDraft({ ...draft, start: e.target.value })} className={FIELD} />

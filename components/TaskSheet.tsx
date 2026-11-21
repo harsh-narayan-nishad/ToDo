@@ -264,7 +264,7 @@ export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat }: 
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {/* the CSV icon in a round glass button, with "Import CSV" written beside it (both open the file picker) */}
-        <button type="button" onClick={() => fileRef.current?.click()} className="group inline-flex items-center gap-3 text-sm text-ink outline-none">
+        <button type="button" data-tour="import" onClick={() => fileRef.current?.click()} className="group inline-flex items-center gap-3 text-sm text-ink outline-none">
           <span className="glass-fab relative grid h-10 w-10 shrink-0 place-items-center rounded-full group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-medium">
             <span className="pointer-events-none absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={20} blur={3} /></span>
             <FileUp className="relative h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
