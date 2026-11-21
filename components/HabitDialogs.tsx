@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, Check, Clock, Flame, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -310,31 +310,64 @@ export function SleepDialog({ habit, entry, onClose, onSave }: {
   );
 }
 
-const LEVEL_BG = ["bg-overlay/10", "bg-ink/25", "bg-ink/45", "bg-ink/70", "bg-ink"];
 export const levelOf = (share: number) => (share <= 0 ? 0 : share < 0.34 ? 1 : share < 0.67 ? 2 : share < 1 ? 3 : 4);
 
 /** A neutral GitHub-style grid, one column per week (Monday on top). `cells` run oldest → newest. */
+/**
+ * The last 26 weeks as a heatmap, drawn like the Profile's Consistency map: rounded cells, month names on top, a
+ * green scale, today outlined, and opened scrolled to the current week.
+ */
+const GRID_CELL = 11;
+const GRID_GAP = 3;
+const GRID_GREEN = ["bg-overlay/10", "bg-accent-medium/30", "bg-accent-medium/55", "bg-accent-medium/80", "bg-accent-medium"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function HabitGrid({ cells }: { cells: { day: string; level: number; title: string; off?: boolean }[] }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [cells.length]);
   if (!cells.length) return null;
+  const now = today();
   const [y, m, d] = cells[0].day.split("-").map(Number);
   const lead = (new Date(y, m - 1, d).getDay() + 6) % 7;
   const all = [...Array<null>(lead).fill(null), ...cells];
   const weeks: (typeof all)[] = [];
   for (let i = 0; i < all.length; i += 7) weeks.push(all.slice(i, i + 7));
+  // A month's name above the first week it starts in.
+  let lastMonth = -1;
+  const labels = weeks.map((w) => {
+    const first = w.find(Boolean);
+    if (!first) return "";
+    const mo = Number(first.day.slice(5, 7)) - 1;
+    if (mo === lastMonth) return "";
+    lastMonth = mo;
+    return MONTH_SHORT[mo];
+  });
+  const cols = `repeat(${weeks.length}, ${GRID_CELL}px)`;
   return (
     <div>
-      <div className="flex gap-[3px] overflow-x-auto pb-1">
-        {weeks.map((w, wi) => (
-          <div key={wi} className="flex flex-col gap-[3px]">
-            {w.map((c, di) => c
-              ? <span key={c.day} title={c.title} aria-label={c.title} className={cn("h-3 w-3 shrink-0", c.off ? "border border-dashed border-overlay/15" : LEVEL_BG[c.level])} />
-              : <span key={`e${di}`} className="h-3 w-3" />)}
+      <div className="flex justify-center">
+        <div ref={scroller} className="max-w-full overflow-x-auto pb-2">
+          <div className="inline-flex flex-col gap-2">
+            <div className="grid" style={{ gridTemplateColumns: cols, columnGap: GRID_GAP }}>
+              {labels.map((l, wi) => <div key={wi} className="relative h-4 overflow-visible whitespace-nowrap text-xs text-ink-muted">{l && <span className="absolute left-0">{l}</span>}</div>)}
+            </div>
+            <div className="grid" style={{ gridTemplateColumns: cols, columnGap: GRID_GAP }}>
+              {weeks.map((w, wi) => (
+                <div key={wi} className="grid" style={{ gridTemplateRows: `repeat(7, ${GRID_CELL}px)`, rowGap: GRID_GAP }}>
+                  {w.map((c, di) => c
+                    ? <span key={c.day} title={c.title} aria-label={c.title} style={{ width: GRID_CELL, height: GRID_CELL }}
+                        className={cn("rounded-[2px]", c.off ? "border border-dashed border-overlay/15" : GRID_GREEN[c.level], c.day === now && "ring-2 ring-ink/70 ring-offset-1 ring-offset-canvas")} />
+                    : <span key={`e${di}`} style={{ width: GRID_CELL, height: GRID_CELL }} />)}
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        </div>
       </div>
-      <div className="mt-3 flex items-center gap-1.5 text-xs text-ink-faint">
-        Less {LEVEL_BG.map((bg) => <span key={bg} className={cn("h-3 w-3", bg)} />)} More
-        <span className="ml-3 h-3 w-3 border border-dashed border-overlay/15" /> Not planned
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-xs text-ink-muted">
+        <span>No activity</span>
+        {GRID_GREEN.map((bg) => <span key={bg} className={cn("h-[11px] w-[11px] rounded-[2px]", bg)} />)}
+        <span>High</span>
+        <span className="ml-3 h-[11px] w-[11px] rounded-[2px] border border-dashed border-overlay/15" /> <span>Not planned</span>
       </div>
     </div>
   );

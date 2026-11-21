@@ -124,14 +124,6 @@ export function TodoApp() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  /** Phones: whether the page has scrolled (the top bar then shows its hairline). */
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 4);
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => window.removeEventListener("scroll", on);
-  }, []);
   /** Open tasks due now (today + overdue), for the phone greeting; null until the task list has loaded. */
   const [dueNow, setDueNow] = useState<number | null>(null);
 
@@ -155,8 +147,7 @@ export function TodoApp() {
             sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
         </nav>
       )}
-      {/* Phones: the greeting bar stays on top like an iOS navigation bar (frosted; a hairline once the page scrolls). */}
-      <aside data-scrolled={scrolled || undefined} className="ios-navbar flex shrink-0 flex-col gap-6 max-md:sticky max-md:top-0 max-md:z-40 max-md:-mx-4 max-md:-mt-6 max-md:px-4 max-md:pb-3 max-md:pt-[max(1.25rem,env(safe-area-inset-top))] sm:max-md:-mx-6 sm:max-md:px-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
+      <aside className="flex shrink-0 flex-col gap-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
         <div className="relative flex items-center justify-between">
           <div className="hidden md:block"><Logo /></div>
           {/* Phones: a greeting instead of the logo. */}
