@@ -135,15 +135,14 @@ export function TodoApp() {
       {/* Phones: an iOS tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
       {phone && (
         <nav aria-label="Sections" className="ios-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-          {TABS.filter((t) => t.id !== "profile").map(({ id, label }) => (
+          {(["tasks", "habits", "calendar", "profile"] as Tab[]).map((id) => TABS.find((t) => t.id === id)!).map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
               className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#007AFF" : "#8E8E93" }}>
               <TabIcon name={id as TabIconName} active={tab === id} />
               {label}
             </button>
           ))}
-          <NotificationBell tab refreshKey={refreshKey + version} onNavigate={setTab} />
-          <HamburgerMenu tab tabActive={tab === "profile" || tab === "history"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+          <HamburgerMenu tab tabActive={tab === "history"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
             sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} />
         </nav>
       )}
@@ -156,6 +155,8 @@ export function TodoApp() {
             <p className="text-sm text-ink-muted">{dueNow === null ? "Here is your day" : dueNow > 0 ? "You have work today" : "Nothing due today"}</p>
           </div>
           {/* The Pacewise-style hamburger menu: History, theme, and the account with Log out. */}
+          {/* Phones: only the bell up here (the menu is "More" in the tab bar). */}
+          {phone && <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />}
           {!phone && (
             <div className="flex items-center gap-2">
               {/* Missed tasks, today's tasks and habit status. */}

@@ -3,7 +3,7 @@
  * filled version on the selected tab (the details are then cut out in the bar's own colour). Original drawings,
  * one consistent set, 24 × 24.
  */
-export type TabIconName = "tasks" | "habits" | "calendar" | "alerts" | "more";
+export type TabIconName = "tasks" | "habits" | "calendar" | "profile" | "alerts" | "more";
 
 /** The colour the cut-out details take on a filled icon (the tab bar's background). */
 const CUT = "rgb(var(--canvas))";
@@ -39,6 +39,12 @@ export function TabIcon({ name, active, className = "h-[26px] w-[26px]" }: { nam
           {[8, 12, 16].flatMap((x) => [13.25, 17].map((y) => (
             <circle key={`${x}-${y}`} cx={x} cy={y} r="1.05" fill={active ? CUT : "currentColor"} />
           )))}
+        </>
+      )}
+      {name === "profile" && (
+        <>
+          <circle cx="12" cy="8" r="3.9" {...body} />
+          <path d="M4.6 20.25c.55-4.05 3.6-6.6 7.4-6.6s6.85 2.55 7.4 6.6z" {...body} />
         </>
       )}
       {name === "alerts" && (

@@ -85,6 +85,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
   const [tick, setTick] = useState(0);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const dim = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
 
   useEffect(() => setSeen(loadSeen()), []);
@@ -121,7 +122,10 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
   useEffect(() => {
     if (!open) return;
     void load();
-    const onDown = (e: PointerEvent) => { if (!panel.current?.contains(e.target as Node) && !button.current?.contains(e.target as Node)) setOpen(false); };
+    const onDown = (e: PointerEvent) => {
+      if (e.target === dim.current) return; // the dim layer closes on its own click, so the tap reaches nothing underneath
+      if (!panel.current?.contains(e.target as Node) && !button.current?.contains(e.target as Node)) setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
@@ -150,6 +154,9 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
       </button>
       )}
       {open && pos && createPortal(
+        <>
+        {/* The page behind dims (no blur) so it does not distract; a tap there only closes the panel. */}
+        <div ref={dim} className="notif-dim fade-in fixed inset-0 z-[115]" aria-hidden onClick={() => setOpen(false)} />
         // Like iOS Notification Centre: a blurred backdrop, a bold title, and each notification on its own frosted card.
         <div ref={panel} role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
           style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
@@ -181,7 +188,8 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
               );
             })}
           </div>
-        </div>,
+        </div>
+        </>,
         document.body,
       )}
     </>
