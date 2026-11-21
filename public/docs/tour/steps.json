@@ -18,14 +18,14 @@
     "title": "Range",
     "tag": null,
     "step": "Tour · 2 of 17",
-    "body": "The days this plan covers: this week, the next 7 days, this month, or your own dates."
+    "body": "The days this plan covers: this week, the next 7 days, this month, or your own dates. Tap OK and the tour marks 1 week: the next 7 days."
   },
   {
     "file": "step-03.jpg",
     "title": "Repeat",
     "tag": null,
     "step": "Tour · 3 of 17",
-    "body": "How often the tasks repeat in that range: every day, weekdays, once a week, every few days… Each row can also have its own repeat."
+    "body": "How often the tasks repeat in that range: every day, weekdays, once a week, every few days… Each row can also have its own repeat. Tap OK and the tour sets Every day."
   },
   {
     "file": "step-04.jpg",
@@ -53,7 +53,7 @@
     "title": "Date",
     "tag": "Optional",
     "step": "Tour · 7 of 17",
-    "body": "A date adds the task on that day only. Left empty, it repeats on the plan's days (Range and Repeat). Tap OK to set today, so this adds exactly one task."
+    "body": "A date adds the task on that day only. Left empty, it repeats on the plan's days (Range and Repeat). The tour leaves it empty, so the task is set on every day of the week it marked."
   },
   {
     "file": "step-08.jpg",
@@ -81,21 +81,21 @@
     "title": "Repeat",
     "tag": "Optional",
     "step": "Tour · 11 of 17",
-    "body": "How often this row repeats in the plan. With a Date it is Once, as here. Without one it follows the plan's Repeat, or its own."
+    "body": "How often this row repeats in the plan. With a Date it is Once. Without one, as here, it follows the plan's Repeat (every day), or its own."
   },
   {
     "file": "step-12.jpg",
     "title": "Preview",
     "tag": null,
     "step": "Tour · 12 of 17",
-    "body": "Everything filled in. This calendar shows the day your task will be set on: the filled-in date is today. With a repeat, every planned day would be filled in here."
+    "body": "Everything filled in. This calendar shows the days your task will be set on: the whole marked week, from today for 7 days, 9–10 AM each day."
   },
   {
     "file": "step-13.jpg",
     "title": "Add it",
     "tag": null,
     "step": "Tour · 13 of 17",
-    "body": "Your own tasks go to your list and your Pacewise calendar. This one is a practice task: it shows in your list for the tour only and is not saved. Tap OK to add it."
+    "body": "Your own tasks go to your list and your Pacewise calendar. This one is a practice task for the week: it shows in your list for the tour only and is not saved. Tap OK to add it."
   },
   {
     "file": "step-14.jpg",
@@ -109,7 +109,7 @@
     "title": "Tick it off",
     "tag": null,
     "step": "Tour · 15 of 17",
-    "body": "Tap OK and the tour ticks it. Because this is a practice task, it then disappears. Your own tasks go to Done."
+    "body": "Tap OK and the tour ticks today's one. Because this is a practice task, it then disappears (the rest of its week goes when the tour ends). Your own tasks go to Done."
   },
   {
     "file": "step-16.jpg",

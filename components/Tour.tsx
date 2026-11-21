@@ -1,14 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { today } from "@/lib/days";
 import { PLANNER_DRAFT_KEY } from "@/components/TaskPlanner";
 import { tourState, tourTasks } from "@/lib/tour";
 
 /**
  * The guided tour (More → Take the tour). It plays by itself: a spotlight moves over the real app while a small card
  * says what is happening, and it adds one real task through the task planner, exactly as a person would
- * (+ → type a title → today only → Add). "Skip" stops it at any step. A planner draft the person had is put aside
+ * (+ → mark 1 week → type a title → Add). "Skip" stops it at any step. A planner draft the person had is put aside
  * during the tour and given back afterwards. Every run adds a new task (numbered after the first).
  */
 const TOUR_TITLE = "Try Pacewise To-do";
@@ -88,7 +87,6 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
     putDraft(null); // the planner opens fresh for the tour
     goTasks();
     window.scrollTo({ top: 0, behavior: "smooth" });
-    const now = today();
     const name = TOUR_TITLE;
     const P = '[aria-label="Task planner"]';
 
@@ -102,18 +100,28 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
       add.click();
       plannerOpen.current = true;
 
-      // 2–3. What the planner's parts do (only explained; nothing is changed)
-      const explain: [string, string, string][] = [
-        [`${P} [data-tour="range"]`, "Range", "The days this plan covers: this week, the next 7 days, this month, or your own dates."],
-        [`${P} [data-tour="repeat"]`, "Repeat", "How often the tasks repeat in that range: every day, weekdays, once a week, every few days… Each row can also have its own repeat."],
+      // 2–3. Range and Repeat: the tour marks one week (Next 7 days), every day
+      const explain: [string, string, string, string][] = [
+        [`${P} [data-tour="range"]`, "Range", "The days this plan covers: this week, the next 7 days, this month, or your own dates. Tap OK and the tour marks 1 week: the next 7 days.", "Next 7 days"],
+        [`${P} [data-tour="repeat"]`, "Repeat", "How often the tasks repeat in that range: every day, weekdays, once a week, every few days… Each row can also have its own repeat. Tap OK and the tour sets Every day.", "Every day"],
       ];
-      for (const [i, [target, heading, body]] of explain.entries()) {
+      for (const [i, [target, heading, body, choice]] of explain.entries()) {
         const el = await waitFor(target, alive);
         if (!el) continue; // not on screen: skip this one
         el.scrollIntoView({ block: "center", behavior: "smooth" });
         setCard({ n: 2 + i, ok: true, title: heading, body, target });
         await waitOk();
         if (!alive()) return;
+        // pick the choice in its menu (if the menu does not open, the planner's own default is 7 days, every day)
+        const trigger = el.querySelector<HTMLElement>('button[aria-haspopup="listbox"]');
+        if (trigger) {
+          trigger.click();
+          await waitFor('[role="listbox"] [role="option"]', alive, 2000);
+          await sleep(300);
+          const opt = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((o) => o.textContent?.trim().startsWith(choice));
+          if (opt) opt.click(); else window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+          await sleep(400);
+        }
       }
 
       // 4–11. Every column of the row: what it is, whether it is required, and the tour fills it in.
@@ -157,11 +165,11 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
         await sleep(400);
       }
 
-      // Date (optional): today, so the tour adds exactly one task
+      // Date (optional): left empty, so the task is set on every day of the marked week
       const date = (await cell('[data-cell="0-3"]')) as HTMLInputElement | null;
       if (date) {
-        if (!(await step(7, '[data-cell="0-3"]', "Date", "Optional", "A date adds the task on that day only. Left empty, it repeats on the plan's days (Range and Repeat). Tap OK to set today, so this adds exactly one task."))) return;
-        setValue(date, now);
+        if (!(await step(7, '[data-cell="0-3"]', "Date", "Optional", "A date adds the task on that day only. Left empty, it repeats on the plan's days (Range and Repeat). The tour leaves it empty, so the task is set on every day of the week it marked."))) return;
+        if (date.value) setValue(date, "");
         await sleep(500);
       }
 
@@ -188,7 +196,7 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
 
       // Repeat (optional)
       if (await cell('[data-cell="0-6"]')) {
-        if (!(await step(11, '[data-cell="0-6"]', "Repeat", "Optional", "How often this row repeats in the plan. With a Date it is Once, as here. Without one it follows the plan's Repeat, or its own."))) return;
+        if (!(await step(11, '[data-cell="0-6"]', "Repeat", "Optional", "How often this row repeats in the plan. With a Date it is Once. Without one, as here, it follows the plan's Repeat (every day), or its own."))) return;
       }
 
       // Preview: the calendar at the bottom shows the day(s) the task will be set on
@@ -196,7 +204,7 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
       if (preview) {
         preview.scrollIntoView({ block: "center", behavior: "smooth" });
         await sleep(400);
-        setCard({ n: 12, ok: true, title: "Preview", body: "Everything filled in. This calendar shows the day your task will be set on: the filled-in date is today. With a repeat, every planned day would be filled in here.", target: `${P} [data-tour="preview"]` });
+        setCard({ n: 12, ok: true, title: "Preview", body: "Everything filled in. This calendar shows the days your task will be set on: the whole marked week, from today for 7 days, 9–10 AM each day.", target: `${P} [data-tour="preview"]` });
         await waitOk();
         if (!alive()) return;
       }
@@ -204,7 +212,7 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
       // Add (the practice task is made on this screen only)
       const submit = need(await waitFor('[data-tour="planner-add"]', alive));
       submit.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      setCard({ n: 13, ok: true, title: "Add it", body: "Your own tasks go to your list and your Pacewise calendar. This one is a practice task: it shows in your list for the tour only and is not saved. Tap OK to add it.", target: '[data-tour="planner-add"]' });
+      setCard({ n: 13, ok: true, title: "Add it", body: "Your own tasks go to your list and your Pacewise calendar. This one is a practice task for the week: it shows in your list for the tour only and is not saved. Tap OK to add it.", target: '[data-tour="planner-add"]' });
       await waitOk();
       if (!alive()) return;
       submit.click();
@@ -228,7 +236,7 @@ export function Tour({ onClose, goTasks }: { onClose: () => void; goTasks: () =>
         setCard({ n: 14, ok: true, title: "Your new task", body: "Tick the box when it is done. Missed one? You can still tick it off the next day.", target: sel });
         await waitOk();
         if (!alive()) return;
-        setCard({ n: 15, ok: true, title: "Tick it off", body: "Tap OK and the tour ticks it. Because this is a practice task, it then disappears. Your own tasks go to Done.", target: sel });
+        setCard({ n: 15, ok: true, title: "Tick it off", body: "Tap OK and the tour ticks today's one. Because this is a practice task, it then disappears (the rest of its week goes when the tour ends). Your own tasks go to Done.", target: sel });
         await waitOk();
         if (!alive()) return;
         const box = shown(`${sel} button[aria-label="Mark as done"]`);
