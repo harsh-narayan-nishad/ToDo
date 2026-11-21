@@ -5,7 +5,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 /*
  * Copied from Pacewise (components/FlipReader/ui/LiquidGlass.tsx) so To-do uses the very same glass as the flip book.
  *
- * Liquid glass, modelled on Apple's material:
+ * Liquid glass, the Pacewise material:
  *
  *  - LENS: the content behind is bent at the rim like light through a thick pane of glass with a rounded
  *    (convex squircle) edge. The bend at every pixel of the rim comes from Snell's law (n = 1.5) applied to the

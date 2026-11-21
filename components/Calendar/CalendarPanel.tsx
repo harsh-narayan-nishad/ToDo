@@ -131,7 +131,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
     await sync(removeEvent(userId, id));
   };
 
-  // Apple-style title: the month in bold, the year light.
+  // Title: the month in bold, the year light.
   const titleParts = useMemo(() => {
     const m = moment(date);
     if (view === "year") return { bold: m.format("YYYY"), light: "" };
@@ -146,7 +146,7 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
 
   return (
     <>
-      <Card className="ios-card rounded-[32px] bg-canvas-raised p-4 sm:p-6">
+      <Card className="pw-card rounded-[32px] bg-canvas-raised p-4 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <button type="button" aria-label="New task" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
             <Plus className="h-4 w-4" />

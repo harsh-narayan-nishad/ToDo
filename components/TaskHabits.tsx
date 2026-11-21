@@ -106,7 +106,7 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
         <span className="text-lg font-medium normal-case tracking-normal text-ink md:hidden">Habits <span className="text-sm font-normal text-ink-faint">{doneCount} of {dueCount}</span></span>
         <span className="hidden md:inline">Habits · {doneCount} of {dueCount}</span>
         {onOpenHabits && (
-          <button type="button" onClick={onOpenHabits} className="ios-circle-btn inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium normal-case tracking-normal text-ink active:scale-95">
+          <button type="button" onClick={onOpenHabits} className="pw-circle-btn inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium normal-case tracking-normal text-ink active:scale-95">
             All habits <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </button>
         )}
@@ -114,7 +114,7 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
       {error && <p className="mb-2 text-sm text-accent-extreme" role="alert">{error}</p>}
       <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
         {showSleep && sleep && (
-          <li className="ios-card flex items-center gap-4 px-4 py-4 sm:px-5 max-md:gap-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5">
+          <li className="pw-card flex items-center gap-4 px-4 py-4 sm:px-5 max-md:gap-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5">
             <span className="grid shrink-0 place-items-center max-md:h-14 max-md:w-14 max-md:rounded-full max-md:bg-canvas"><Moon className="h-6 w-6 shrink-0 text-ink-muted" aria-hidden /></span>
             <div className="min-w-0 flex-1">
               <p className={lastNight ? "text-ink-muted" : "text-ink"}>{sleep.name}</p>

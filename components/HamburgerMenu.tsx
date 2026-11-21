@@ -6,12 +6,12 @@ import type { User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TabIcon } from "@/components/TabIcons";
 
-/** iOS Settings-style pieces: a rounded group of rows, and one row (coloured icon tile, label, value, chevron or tick). */
+/** Settings-style pieces: a rounded group of rows, and one row (coloured icon tile, label, value, chevron or tick). */
 function Group({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="mb-7">
       {title && <p className="mb-1.5 px-4 text-[13px] uppercase tracking-wide text-ink-muted">{title}</p>}
-      <div className="ios-group overflow-hidden rounded-[14px]">{children}</div>
+      <div className="pw-group overflow-hidden rounded-[14px]">{children}</div>
     </div>
   );
 }
@@ -27,17 +27,17 @@ function Row({ icon: Icon, tint, label, value, mark = "chevron", danger, onClick
         <span className={cn("flex-1 truncate text-[17px]", danger ? "text-center text-accent-extreme" : "text-ink")}>{label}</span>
         {value && <span className="shrink-0 text-[17px] text-ink-muted">{value}</span>}
         {mark === "chevron" && <ChevronRight className={cn("h-4 w-4 shrink-0 text-ink-faint transition-transform", expanded && "rotate-90")} aria-hidden />}
-        {mark === "check" && <Check className="h-[18px] w-[18px] shrink-0 text-[#007AFF]" strokeWidth={2.5} aria-hidden />}
+        {mark === "check" && <Check className="h-[18px] w-[18px] shrink-0 text-[#3478F6]" strokeWidth={2.5} aria-hidden />}
       </span>
     </button>
   );
 }
-/** Icon tile colours per section, as in iOS Settings. */
-const TINT: Record<string, string> = { tasks: "#007AFF", habits: "#34C759", profile: "#8E8E93", calendar: "#FF3B30" };
+/** Icon tile colours per section. */
+const TINT: Record<string, string> = { tasks: "#3478F6", habits: "#30C26A", profile: "#8C8F98", calendar: "#F2453D" };
 
 /**
  * The hamburger menu, built like Pacewise's (Pacewise/components/Navigation/HamburgerMenu.tsx): a drawer from the
- * right over a dimmed page. Laid out like iOS Settings: the account on top, then rounded groups of rows (the
+ * right over a dimmed page. Laid out as a settings list: the account on top, then rounded groups of rows (the
  * sections on phones; History and Theme), and Log out on its own.
  */
 export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false, onTour }: {
@@ -46,7 +46,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
   sections?: { id: string; label: string; icon: typeof Menu }[]; current?: string; onSection?: (id: string) => void;
   /** Phones: shown as the "More" item of the bottom tab bar; `tabActive` when the open section lives in this menu. */
   tab?: boolean; tabActive?: boolean;
-  /** "Take the tour": the guided tour that adds a first task. */
+  /** "Tour": opens the Tour guide (every step with a picture, and a button that plays the live tour). */
   onTour?: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -71,14 +71,14 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
     <>
       {tab ? (
         <button type="button" onClick={() => setOpen(true)} aria-label="More" aria-haspopup="dialog"
-          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tabActive || open ? "#007AFF" : "#8E8E93" }}>
+          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tabActive || open ? "#3478F6" : "#8C8F98" }}>
           <TabIcon name="more" active={tabActive || open} />
           More
         </button>
       ) : (
       <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" aria-haspopup="dialog"
-        className="ios-circle-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#007AFF] transition-transform active:scale-95">
-        {/* iOS "more" button: three dots in system blue */}
+        className="pw-circle-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#3478F6] transition-transform active:scale-95">
+        {/* the "more" button: three dots in the Pacewise blue */}
         <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={2.25} />
       </button>
       )}
@@ -87,7 +87,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
         <>
           <div className={cn("fixed inset-0 z-[90] bg-[rgb(var(--shadow-color))]/50", closing ? "fade-out" : "fade-in")} onClick={close} />
           <div role="dialog" aria-modal="true" aria-label="Menu"
-            className={cn("ios-grouped-bg fixed inset-y-0 right-0 z-[95] flex w-[92vw] max-w-md flex-col border-l border-overlay/10 bg-canvas shadow-themed", closing ? "drawer-out" : "drawer-in")}>
+            className={cn("pw-grouped-bg fixed inset-y-0 right-0 z-[95] flex w-[92vw] max-w-md flex-col border-l border-overlay/10 bg-canvas shadow-themed", closing ? "drawer-out" : "drawer-in")}>
             <div className="flex items-center justify-between gap-4 px-5 pb-1 pt-5">
               <h2 className="text-[34px] font-semibold leading-tight tracking-[-0.02em] text-ink">Menu</h2>
               <button type="button" onClick={close} aria-label="Close menu" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-overlay/[0.08] text-ink-muted transition-colors active:scale-95">
@@ -96,9 +96,9 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 pb-8 pt-4">
-              {/* The account, like the Apple ID card at the top of Settings. */}
-              <div className="ios-group mb-7 flex items-center gap-3.5 rounded-[14px] px-4 py-3.5">
-                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#A1A1A6] to-[#7C7C80] text-xl font-medium uppercase text-white">{user.name.trim().charAt(0) || "?"}</span>
+              {/* The account card at the top. */}
+              <div className="pw-group mb-7 flex items-center gap-3.5 rounded-[14px] px-4 py-3.5">
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#A0A3AB] to-[#7B7E86] text-xl font-medium uppercase text-white">{user.name.trim().charAt(0) || "?"}</span>
                 <span className="min-w-0">
                   <span className="block truncate text-[20px] text-ink">{user.name}</span>
                   <span className="block truncate text-[13px] text-ink-muted">@{user.username}</span>
@@ -109,7 +109,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
                 <nav className="md:hidden" aria-label="Sections">
                   <Group>
                     {sections.map(({ id, label, icon }, i) => (
-                      <Row key={id} icon={icon} tint={TINT[id] ?? "#8E8E93"} label={label} mark={current === id ? "check" : "chevron"} current={current === id}
+                      <Row key={id} icon={icon} tint={TINT[id] ?? "#8C8F98"} label={label} mark={current === id ? "check" : "chevron"} current={current === id}
                         last={i === sections.length - 1} onClick={() => { onSection(id); close(); }} />
                     ))}
                   </Group>
@@ -117,14 +117,14 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
               )}
 
               <Group title="Your To-do">
-                {onTour && <Row icon={Compass} tint="#34C759" label="Take the tour" onClick={() => { close(); onTour(); }} />}
+                {onTour && <Row icon={Compass} tint="#30C26A" label="Tour" value="Guide" onClick={() => { close(); onTour(); }} />}
                 {/* History lives here instead of in the section tabs. */}
-                <Row icon={History} tint="#FF9500" label="History" onClick={() => { onHistory(); close(); }} />
-                <Row icon={Palette} tint="#5856D6" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}
+                <Row icon={History} tint="#F59A23" label="History" onClick={() => { onHistory(); close(); }} />
+                <Row icon={Palette} tint="#6A5AE0" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}
                   onClick={() => setSection(section === "theme" ? null : "theme")} />
                 {section === "theme" && ([[true, "Light", Sun], [false, "Dark", Moon]] as const).map(([isLight, label, Icon], i) => (
                   <div key={label} className="pl-11">
-                    <Row icon={Icon} tint={isLight ? "#FFCC00" : "#636366"} label={label} mark={light === isLight ? "check" : "none"} last={i === 1} onClick={() => setLight(isLight)} />
+                    <Row icon={Icon} tint={isLight ? "#F4C430" : "#64676E"} label={label} mark={light === isLight ? "check" : "none"} last={i === 1} onClick={() => setLight(isLight)} />
                   </div>
                 ))}
               </Group>

@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRou
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { Tour } from "@/components/Tour";
+import { DocsPanel } from "@/components/DocsPanel";
 import { TabIcon, type TabIconName } from "@/components/TabIcons";
 import { NotificationBell } from "@/components/NotificationBell";
 import { WheelSpinner } from "@/components/WheelSpinner";
@@ -19,7 +20,7 @@ import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
 import { isNeetAspirant } from "@/lib/neetSyllabus";
 
-type Tab = "tasks" | "history" | "habits" | "profile" | "calendar";
+type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   // History is in the hamburger menu, not here.
@@ -135,19 +136,20 @@ export function TodoApp() {
 
   return (
     <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 max-md:pb-28 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
-      {/* Phones: an iOS tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
+      {/* Phones: a tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
       {touring && <Tour onClose={() => setTouring(false)} goTasks={() => setTab("tasks")} />}
       {phone && (
-        <nav aria-label="Sections" data-tour="tabs" className="ios-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        <nav aria-label="Sections" data-tour="tabs" className="pw-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          {/* Tasks, Habits, Calendar, Profile; the Tour guide is in More. */}
           {(["tasks", "habits", "calendar", "profile"] as Tab[]).map((id) => TABS.find((t) => t.id === id)!).map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
-              className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#007AFF" : "#8E8E93" }}>
-              <TabIcon name={id as TabIconName} active={tab === id} />
+              className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#3478F6" : "#8C8F98" }}>
+              <TabIcon name={(id === "docs" ? "tour" : id) as TabIconName} active={tab === id} />
               {label}
             </button>
           ))}
-          <HamburgerMenu tab tabActive={tab === "history"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
-            sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTouring(true)} />
+          <HamburgerMenu tab tabActive={tab === "history" || tab === "docs"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+            sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTab("docs")} />
         </nav>
       )}
       <aside className="flex shrink-0 flex-col gap-6 md:sticky md:top-10 md:h-[calc(100vh-5rem)] md:w-56">
@@ -166,7 +168,7 @@ export function TodoApp() {
               {/* Missed tasks, today's tasks and habit status. */}
               <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
               <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
-                sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTouring(true)} />
+                sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTab("docs")} />
             </div>
           )}
         </div>
@@ -198,13 +200,14 @@ export function TodoApp() {
               <ArrowLeft className="h-5 w-5" strokeWidth={2} />
             </button>
           )}
-          <h1 className="font-display text-3xl">{tab === "history" ? "History" : TABS.find((t) => t.id === tab)?.label}.</h1>
+          <h1 className="font-display text-3xl">{tab === "history" ? "History" : tab === "docs" ? "Tour" : TABS.find((t) => t.id === tab)?.label}.</h1>
         </div>
         {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} onDueNow={setDueNow} onOpenCalendar={() => setTab("calendar")} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
         {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}
         {tab === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
+        {tab === "docs" && <DocsPanel onTour={() => setTouring(true)} />}
       </main>
     </div>
   );

@@ -17,8 +17,8 @@ const TONE: Record<Tone, string> = {
   blue: "bg-accent-slow/15 text-accent-slow",
   neutral: "bg-overlay/10 text-ink-muted",
 };
-/** iOS-style icon tiles: a solid colour with a white icon. */
-const TILE: Record<Tone, string> = { red: "#FF3B30", amber: "#FF9500", blue: "#007AFF", neutral: "#8E8E93" };
+/** Icon tiles: a solid colour with a white icon. */
+const TILE: Record<Tone, string> = { red: "#F2453D", amber: "#F59A23", blue: "#3478F6", neutral: "#8C8F98" };
 const KEY = "pacewise-todo-notifications";
 /** Read and cleared notifications, remembered on this device only. */
 function loadSeen(): { read: string[]; gone: string[] } {
@@ -137,19 +137,19 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
     <>
       {tab ? (
         <button ref={button} type="button" data-tour="alerts" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
-          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: open ? "#007AFF" : "#8E8E93" }}>
+          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: open ? "#3478F6" : "#8C8F98" }}>
           <span className="relative">
             <TabIcon name="alerts" active={open} />
-            {unread > 0 && <span className="absolute -right-2.5 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[10px] font-semibold leading-none text-white">{unread > 9 ? "9+" : unread}</span>}
+            {unread > 0 && <span className="absolute -right-2.5 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#F2453D] px-1 text-[10px] font-semibold leading-none text-white">{unread > 9 ? "9+" : unread}</span>}
           </span>
           Alerts
         </button>
       ) : (
       <button ref={button} type="button" data-tour="alerts" onClick={() => setOpen((o) => !o)} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"} aria-expanded={open} aria-haspopup="dialog"
-        className="ios-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#007AFF] transition-transform active:scale-95">
+        className="pw-circle-btn relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#3478F6] transition-transform active:scale-95">
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-canvas">{unread > 9 ? "9+" : unread}</span>
+          <span className="absolute -right-1 -top-1 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-[#F2453D] px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-canvas">{unread > 9 ? "9+" : unread}</span>
         )}
       </button>
       )}
@@ -157,23 +157,23 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
         <>
         {/* The page behind dims (no blur) so it does not distract; a tap there only closes the panel. */}
         <div ref={dim} className="notif-dim fade-in fixed inset-0 z-[115]" aria-hidden onClick={() => setOpen(false)} />
-        // Like iOS Notification Centre: a blurred backdrop, a bold title, and each notification on its own frosted card.
-        <div ref={panel} data-tour="alerts-panel" role="dialog" aria-label="Notifications" className="ios-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
+        // A bold title, and each notification on its own card.
+        <div ref={panel} data-tour="alerts-panel" role="dialog" aria-label="Notifications" className="pw-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
           style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
           <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
             <span className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Notifications</span>
             {unread > 0 && (
-              <button type="button" onClick={markAll} className="ios-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-ink-muted active:scale-95">
+              <button type="button" onClick={markAll} className="pw-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-ink-muted active:scale-95">
                 <CheckCheck className="h-3.5 w-3.5" /> Mark all read
               </button>
             )}
           </div>
           <div className="flex max-h-[min(26rem,70vh)] flex-col gap-2 overflow-y-auto">
-            {notes.length === 0 ? <p className="ios-notif rounded-[18px] px-4 py-6 text-center text-[15px] text-ink-muted">You're all caught up.</p> : notes.map((n) => {
+            {notes.length === 0 ? <p className="pw-notif rounded-[18px] px-4 py-6 text-center text-[15px] text-ink-muted">You're all caught up.</p> : notes.map((n) => {
               const Icon = n.icon;
               const read = seen.read.includes(n.id);
               return (
-                <div key={n.id} className={cn("ios-notif relative flex items-start gap-3 rounded-[18px] p-3 pr-10 transition-opacity", read && "opacity-70")}>
+                <div key={n.id} className={cn("pw-notif relative flex items-start gap-3 rounded-[18px] p-3 pr-10 transition-opacity", read && "opacity-70")}>
                   <button type="button" onClick={() => { update({ ...seen, read: [...new Set([...seen.read, n.id])] }); setOpen(false); onNavigate(n.tab); }} className="flex min-w-0 flex-1 items-start gap-3 text-left">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-white" style={{ backgroundColor: TILE[n.tone] }}><Icon className="h-[18px] w-[18px]" strokeWidth={2} /></span>
                     <span className="min-w-0 flex-1">

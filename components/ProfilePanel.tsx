@@ -24,7 +24,7 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
 
   return (
     <div className="flex flex-col gap-8">
-      <Card className="ios-card flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="pw-card flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-14 w-14 object-cover" /> : (
             <span className="flex h-14 w-14 items-center justify-center bg-overlay/10 font-display text-2xl">{user.name.slice(0, 1).toUpperCase()}</span>
@@ -37,10 +37,10 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat className="ios-card" label="Tasks created" value={t.created} />
-        <Stat className="ios-card" label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
-        <Stat className="ios-card" label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
-        <Stat className="ios-card" label="Hours worked" value={`${t.hours} h`} tone="blue" hint={t.workedDays ? `about ${duration(t.avgMinutesPerWorkedDay)} per working day` : "log time on a task"} />
+        <Stat className="pw-card" label="Tasks created" value={t.created} />
+        <Stat className="pw-card" label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
+        <Stat className="pw-card" label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
+        <Stat className="pw-card" label="Hours worked" value={`${t.hours} h`} tone="blue" hint={t.workedDays ? `about ${duration(t.avgMinutesPerWorkedDay)} per working day` : "log time on a task"} />
       </div>
 
       <WeekChart days={data.heatmap.slice(-7)} onOpenDay={onOpenDay} />
@@ -50,12 +50,12 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
   );
 }
 
-/** "9h 11m", "45m", "0m" (the compact form Screen Time uses). */
+/** "9h 11m", "45m", "0m" (the compact form). */
 const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`);
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
- * The last 7 days as a Screen Time-style chart: the week's total on top, bars of time worked per day against
+ * The last 7 days as a bar chart: the week's total on top, bars of time worked per day against
  * gridlines with their values on the right, a dashed line between days, and a legend underneath. Click a day to open it.
  */
 function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: string) => void }) {
@@ -68,7 +68,7 @@ function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: stri
   const label = (d: HeatDay) => { const l = dayLabel(d.day); return l === "Today" ? "Today" : WEEKDAY[new Date(d.day + "T12:00").getDay()]; };
 
   return (
-    <Card className="ios-card">
+    <Card className="pw-card">
       <div className="mb-1 flex items-center gap-2"><Flame className="h-4 w-4 text-accent-fast" /><h2 className="text-sm uppercase tracking-wide text-ink-muted">Last 7 days</h2></div>
       <p className="mb-5 font-display text-3xl text-ink">{hm(total)}</p>
 

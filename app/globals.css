@@ -44,50 +44,50 @@ html, body {
   --glow-a: 0.45;
   --rim-a: 1;
 }
-/* Phones: Apple-style cards (Profile): rounded, no outline; white with a soft shadow in light mode. */
+/* Phones: Pacewise cards (Profile): rounded, no outline; white with a soft shadow in light mode. */
 @media (max-width: 767px) {
-  .ios-card { border-width: 0 !important; border-radius: 20px !important; background-color: rgb(var(--canvas-raised)); }
-  :root[data-theme="light"] .ios-card { background-color: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 6px 20px rgba(20, 20, 20, 0.06); }
+  .pw-card { border-width: 0 !important; border-radius: 20px !important; background-color: rgb(var(--canvas-raised)); }
+  :root[data-theme="light"] .pw-card { background-color: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 6px 20px rgba(20, 20, 20, 0.06); }
   /* the calendar's time column and day header follow the white card */
-  :root[data-theme="light"] .ios-card .rbc-time-header, :root[data-theme="light"] .ios-card .rbc-time-gutter { background-color: #fff; }
+  :root[data-theme="light"] .pw-card .rbc-time-header, :root[data-theme="light"] .pw-card .rbc-time-gutter { background-color: #fff; }
 }
 
-/* iOS Settings-style menu: grey page with white rounded groups (dark: black page, dark grey groups). */
-:root[data-theme="light"] .ios-grouped-bg { background-color: #F2F2F7; }
-.ios-group { background-color: rgb(var(--canvas-raised)); }
-:root[data-theme="light"] .ios-group { background-color: #fff; }
+/* Settings-style menu: grey page with white rounded groups (dark: black page, dark grey groups). */
+:root[data-theme="light"] .pw-grouped-bg { background-color: #F1F2F6; }
+.pw-group { background-color: rgb(var(--canvas-raised)); }
+:root[data-theme="light"] .pw-group { background-color: #fff; }
 
-/* Phones: the bottom tab bar, like iOS: frosted, with a hairline on top. */
-.ios-tabbar { background: rgb(var(--canvas) / 0.82); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: 0.5px solid rgb(var(--overlay) / 0.16); }
+/* Phones: the bottom tab bar: frosted, with a hairline on top. */
+.pw-tabbar { background: rgb(var(--canvas) / 0.82); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: 0.5px solid rgb(var(--overlay) / 0.16); }
 
-/* Round header buttons (bell, menu), like iOS: white with a soft shadow in light mode, dark grey in dark mode. */
-.ios-circle-btn { background: rgb(var(--canvas-raised)); box-shadow: 0 0 0 0.5px rgb(var(--overlay) / 0.08); }
-:root[data-theme="light"] .ios-circle-btn { background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.06), 0 4px 14px rgba(20, 20, 20, 0.07); }
+/* Round header buttons (bell, menu): white with a soft shadow in light mode, dark grey in dark mode. */
+.pw-circle-btn { background: rgb(var(--canvas-raised)); box-shadow: 0 0 0 0.5px rgb(var(--overlay) / 0.08); }
+:root[data-theme="light"] .pw-circle-btn { background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.06), 0 4px 14px rgba(20, 20, 20, 0.07); }
 
-/* iOS segmented control (Habits filter on phones) */
-.ios-seg { background: rgb(var(--overlay) / 0.12); }
-.ios-seg-on { background: rgb(var(--canvas-raised)); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
-:root[data-theme="light"] .ios-seg { background: rgba(118, 118, 128, 0.12); }
-:root[data-theme="light"] .ios-seg-on { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+/* Segmented control (Habits filter on phones) */
+.pw-seg { background: rgb(var(--overlay) / 0.12); }
+.pw-seg-on { background: rgb(var(--canvas-raised)); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+:root[data-theme="light"] .pw-seg { background: rgba(120, 122, 132, 0.12); }
+:root[data-theme="light"] .pw-seg-on { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
 
 /* The tour's spotlight: everything else dims; the highlighted part gets a soft blue ring. */
-.tour-spot { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(0, 122, 255, 0.9); transition: top 0.35s ease, left 0.35s ease, width 0.35s ease, height 0.35s ease; animation: tour-ring 1.6s ease-out infinite; }
-@keyframes tour-ring { 0% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(0, 122, 255, 0.9); } 70% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 9px rgba(0, 122, 255, 0); } 100% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(0, 122, 255, 0.9); } }
+.tour-spot { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(52, 120, 246, 0.9); transition: top 0.35s ease, left 0.35s ease, width 0.35s ease, height 0.35s ease; animation: tour-ring 1.6s ease-out infinite; }
+@keyframes tour-ring { 0% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(52, 120, 246, 0.9); } 70% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 9px rgba(52, 120, 246, 0); } 100% { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(52, 120, 246, 0.9); } }
 @media (prefers-reduced-motion: reduce) { .tour-spot { animation: none; transition: none; } }
 
-/* iOS pull-down menu (the phones' To do filter) */
-.ios-menu-backdrop { background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-:root[data-theme="light"] .ios-menu-backdrop { background: rgba(0, 0, 0, 0.12); }
-.ios-menu { background: rgb(44, 44, 46); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.08); }
-:root[data-theme="light"] .ios-menu { background: #fff; box-shadow: 0 10px 40px rgba(20, 20, 20, 0.16), 0 0 0 0.5px rgba(20, 20, 20, 0.08); }
+/* Pull-down menu (the phones' To do filter) */
+.pw-menu-backdrop { background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+:root[data-theme="light"] .pw-menu-backdrop { background: rgba(0, 0, 0, 0.12); }
+.pw-menu { background: rgb(42, 43, 48); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.08); }
+:root[data-theme="light"] .pw-menu { background: #fff; box-shadow: 0 10px 40px rgba(20, 20, 20, 0.16), 0 0 0 0.5px rgba(20, 20, 20, 0.08); }
 
-/* Notifications, iOS style: a solid grouped panel with solid cards (nothing shows through). */
-.ios-notif-backdrop { background: rgb(28, 28, 30); }
-:root[data-theme="light"] .ios-notif-backdrop { background: #F2F2F7; }
+/* Notifications: a solid grouped panel with solid cards (nothing shows through). */
+.pw-notif-backdrop { background: rgb(27, 28, 32); }
+:root[data-theme="light"] .pw-notif-backdrop { background: #F1F2F6; }
 .notif-dim { background: rgba(0, 0, 0, 0.3); }
 :root[data-theme="light"] .notif-dim { background: rgba(0, 0, 0, 0.15); }
-.ios-notif { background: rgb(44, 44, 46); }
-:root[data-theme="light"] .ios-notif { background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.05); }
+.pw-notif { background: rgb(42, 43, 48); }
+:root[data-theme="light"] .pw-notif { background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 20, 0.05); }
 
 /* Dropdown buttons (Range, Repeat …): in light mode a clean, almost white glass with a soft shadow, not the grey one. */
 :root[data-theme="light"] .glass-clear {

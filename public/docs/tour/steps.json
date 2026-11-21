@@ -1,0 +1,142 @@
+[
+  {
+    "file": "step-00.jpg",
+    "title": "Welcome to Pacewise To-do",
+    "tag": null,
+    "step": null,
+    "body": "A quick tour: we will add your first task together, step by step. It takes about 20 seconds."
+  },
+  {
+    "file": "step-01.jpg",
+    "title": "Add tasks with +",
+    "tag": null,
+    "step": "Tour · 1 of 17",
+    "body": "Every task starts here: one task or a whole plan. Tap OK and the tour opens it."
+  },
+  {
+    "file": "step-02.jpg",
+    "title": "Range",
+    "tag": null,
+    "step": "Tour · 2 of 17",
+    "body": "The days this plan covers: this week, the next 7 days, this month, or your own dates."
+  },
+  {
+    "file": "step-03.jpg",
+    "title": "Repeat",
+    "tag": null,
+    "step": "Tour · 3 of 17",
+    "body": "How often the tasks repeat in that range: every day, weekdays, once a week, every few days… Each row can also have its own repeat."
+  },
+  {
+    "file": "step-04.jpg",
+    "title": "Title",
+    "tag": "Required",
+    "step": "Tour · 4 of 17",
+    "body": "What needs doing. The only thing a task must have. Things you add are suggested again next time. Tap OK and the tour types one."
+  },
+  {
+    "file": "step-05.jpg",
+    "title": "Notes",
+    "tag": "Optional",
+    "step": "Tour · 5 of 17",
+    "body": "Details, links or steps for the task. Tap OK and the tour adds a short note."
+  },
+  {
+    "file": "step-06.jpg",
+    "title": "Priority",
+    "tag": "Optional",
+    "step": "Tour · 6 of 17",
+    "body": "Low, Medium or High. It is Medium unless you change it. Tap OK and the tour sets High."
+  },
+  {
+    "file": "step-07.jpg",
+    "title": "Date",
+    "tag": "Optional",
+    "step": "Tour · 7 of 17",
+    "body": "A date adds the task on that day only. Left empty, it repeats on the plan's days (Range and Repeat). Tap OK to set today, so this adds exactly one task."
+  },
+  {
+    "file": "step-08.jpg",
+    "title": "All day",
+    "tag": "Optional",
+    "step": "Tour · 8 of 17",
+    "body": "Ticked, the task has no set time. Untick it to give it a time slot. Tap OK and the tour unticks it."
+  },
+  {
+    "file": "step-09.jpg",
+    "title": "From",
+    "tag": "Optional",
+    "step": "Tour · 9 of 17",
+    "body": "When it starts. Tap OK and the tour sets 9:00 AM (you can also use the clock button)."
+  },
+  {
+    "file": "step-10.jpg",
+    "title": "To",
+    "tag": "Optional",
+    "step": "Tour · 10 of 17",
+    "body": "When it ends. Tap OK and the tour sets 10:00 AM, so the task lasts one hour."
+  },
+  {
+    "file": "step-11.jpg",
+    "title": "Repeat",
+    "tag": "Optional",
+    "step": "Tour · 11 of 17",
+    "body": "How often this row repeats in the plan. With a Date it is Once, as here. Without one it follows the plan's Repeat, or its own."
+  },
+  {
+    "file": "step-12.jpg",
+    "title": "Preview",
+    "tag": null,
+    "step": "Tour · 12 of 17",
+    "body": "Everything filled in. This calendar shows the day your task will be set on: the filled-in date is today. With a repeat, every planned day would be filled in here."
+  },
+  {
+    "file": "step-13.jpg",
+    "title": "Add it",
+    "tag": null,
+    "step": "Tour · 13 of 17",
+    "body": "Your own tasks go to your list and your Pacewise calendar. This one is a practice task: it shows in your list for the tour only and is not saved. Tap OK to add it."
+  },
+  {
+    "file": "step-14.jpg",
+    "title": "Your new task",
+    "tag": null,
+    "step": "Tour · 14 of 17",
+    "body": "Tick the box when it is done. Missed one? You can still tick it off the next day."
+  },
+  {
+    "file": "step-15.jpg",
+    "title": "Tick it off",
+    "tag": null,
+    "step": "Tour · 15 of 17",
+    "body": "Tap OK and the tour ticks it. Because this is a practice task, it then disappears. Your own tasks go to Done."
+  },
+  {
+    "file": "step-16.jpg",
+    "title": "Notifications",
+    "tag": null,
+    "step": "Tour · 16 of 17",
+    "body": "Notifications keep you on your tasks of the day. They live inside the app (they are not phone pop-ups) and are worked out from your tasks and habits while the app is open. The red number counts the ones you have not seen yet. Tap OK and the tour opens them."
+  },
+  {
+    "file": "step-17.jpg",
+    "title": "What you are told, and why",
+    "tag": null,
+    "step": "Tour · 16 of 17",
+    "body": "Nothing right now: you are all caught up. You are told about: each open task due today, with its time (\"Starts soon\" in the hour before it starts); tasks missed, not ticked off by their due day; habits still left today, streaks at risk and habits missed yesterday. Tap one to open it in Tasks or Habits, or ✕ to clear it."
+  },
+  {
+    "file": "step-18.jpg",
+    "title": "Everything else",
+    "tag": null,
+    "step": "Tour · 17 of 17",
+    "body": "Habits, Calendar and Profile are one tap away. More holds History, the theme and Tour (this guide, with pictures)."
+  },
+  {
+    "file": "step-19.jpg",
+    "title": "You're all set",
+    "tag": null,
+    "step": null,
+    "body": "Add your own tasks with +, and tick them off as you go. You can replay this tour from More."
+  }
+]

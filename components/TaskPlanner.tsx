@@ -9,6 +9,7 @@ import { FIELD, LABEL } from "@/components/ui";
 import { addDays, longDay, today } from "@/lib/days";
 import { titleProblem } from "@/lib/rules";
 import { createBulk, type BulkResult, type Task } from "@/lib/todo";
+import { tourState } from "@/lib/tour";
 import { cn } from "@/lib/utils";
 import { GlassDropdown } from "@/components/GlassDropdown";
 import { INTERVALS, MAX_RANGE_DAYS, PATTERNS, planDays, repeatLabel, span, weekday, type Repeat } from "@/lib/repeat";
@@ -122,6 +123,16 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
     try {
       const task = (r: SheetRow, day: string) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startDay: day, dueDay: day, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime });
       const tasks = [...repeating.flatMap((r) => daysFor(r).map((day) => task(r, day))), ...dated.map((r) => task(r, r.day))].sort((x, y) => x.startDay.localeCompare(y.startDay));
+      // The tour's practice task: made on this screen only (never saved), so the tour always works.
+      if (tourState.virtual) {
+        const at = new Date().toISOString();
+        const practice: Task[] = tasks.map((t) => ({ ...t, id: `tour-${crypto.randomUUID()}`, status: "open", createdDay: now, completedDay: null, createdAt: at, loggedMinutes: 0 }));
+        added.current = true;
+        clearDraft();
+        onCreated(practice);
+        onClose();
+        return;
+      }
       const res = await createBulk(tasks);
       if (res.created.length) { added.current = true; clearDraft(); onCreated(res.created); }
       if (res.skipped.length === 0) { onClose(); return; }

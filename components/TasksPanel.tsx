@@ -13,7 +13,6 @@ import { lateFinishAllowed, lockedProblem } from "@/lib/rules";
 import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
 import { taskCounts } from "@/components/CountCards";
-import { tourTasks } from "@/lib/tour";
 import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
@@ -50,6 +49,12 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
+  // The tour's practice task lives on this screen only: when the tour ends, it goes.
+  useEffect(() => {
+    const drop = () => setTasks((list) => (list ? list.filter((t) => !t.id.startsWith("tour-")) : list));
+    window.addEventListener("pw-tour-end", drop);
+    return () => window.removeEventListener("pw-tour-end", drop);
+  }, []);
 
   const replace = (t: Task) => setTasks((list) => (list ?? []).map((x) => (x.id === t.id ? { ...x, ...t } : x)));
 
@@ -62,13 +67,12 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       setCelebrating((s) => new Set(s).add(t.id));
       try { navigator.vibrate?.(12); } catch { /* not supported */ }
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      // The tour's practice task: ticking it off deletes it for good (it does not go to Done).
-      const practice = tourTasks.has(t.title);
+      // The tour's practice task (made on this screen only): ticking it off just removes it.
+      const practice = t.id.startsWith("tour-");
       try {
         const wait = new Promise((r) => setTimeout(r, reduced ? 200 : 750));
         if (practice) {
-          await Promise.all([todoApi.remove(t.id), wait]);
-          tourTasks.delete(t.title);
+          await wait;
           setTasks((list) => (list ?? []).filter((x) => x.id !== t.id));
         } else {
           const [saved] = await Promise.all([todoApi.update(t.id, { status }), wait]);
@@ -142,7 +146,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
     <div className="flex flex-col gap-8 pb-40">
       {/* Phones: To do / Done / All and Overview in one dropdown. */}
       <div className="flex items-center gap-3 md:hidden">
-        <GlassDropdown ios label="Show" className="w-32" value={filter} display={filter === "open" ? "To do" : filter === "done" ? "Done" : "All"}
+        <GlassDropdown soft label="Show" className="w-32" value={filter} display={filter === "open" ? "To do" : filter === "done" ? "Done" : "All"}
           groups={[
             { title: "Show", items: [
               { id: "open", label: "To do", meta: tasks ? String(tasks.filter((t) => t.status === "open").length) : undefined },
@@ -219,9 +223,9 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
   const lateOk = !celebrating && lateFinishAllowed(t, today());
   const tickTitle = lateOk ? "Overdue since yesterday: you can still tick it done today" : (locked ?? undefined);
   return (
-    <li data-task-title={t.title} className={cn(celebrating && "task-done-out")}>
+    <li data-task-title={t.title} data-task-id={t.id} className={cn(celebrating && "task-done-out")}>
       {/* Phones: a rounded card with a round check, the day and time on top, and a ⋯ menu. */}
-      <div className="ios-card flex items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:hidden">
+      <div className="pw-card flex items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:hidden">
         <button onClick={onToggle} disabled={!!locked && !lateOk && !celebrating} title={tickTitle} aria-label={done ? "Mark as not done" : "Mark as done"}
           className={cn("ml-1.5 mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30", celebrating && "check-burst")}>
           {done && <Check className={cn("h-3.5 w-3.5", celebrating && "check-pop")} strokeWidth={3} />}
@@ -299,7 +303,7 @@ function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: Cale
           const done = e.title.startsWith("✓ ") || party;
           return (
             <li key={e.id} className={cn(party && "task-done-out")}>
-              <div className="ios-card flex w-full items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:rounded-none md:bg-transparent md:px-5 md:py-4">
+              <div className="pw-card flex w-full items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:rounded-none md:bg-transparent md:px-5 md:py-4">
                 {/* The same tick box as a task: ticking marks the event done in the calendar. */}
                 <button type="button" onClick={() => onToggle(e)} aria-label={done ? "Mark as not done" : "Mark as done"}
                   className={cn("ml-1.5 mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 md:ml-0 md:mt-1", done ? "border-ink bg-ink text-canvas" : "border-overlay/30", party && "check-burst")}>
@@ -326,12 +330,12 @@ function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () =
   return (
     <>
       <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label="Task actions"
-        className="ios-circle-btn mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink active:scale-95">
+        className="pw-circle-btn mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink active:scale-95">
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
-        <DropdownMenu ios anchor={trigger} label="Task actions" value="" minWidth={200}
-          ghost={<span className="ios-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
+        <DropdownMenu soft anchor={trigger} label="Task actions" value="" minWidth={200}
+          ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
           groups={[{ title: "", items: [{ id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
           onSelect={(id) => (id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}

@@ -1,9 +1,9 @@
 /**
- * Icons for the phones' bottom tab bar, drawn in the iOS tab-bar manner: rounded, even line icons that turn into a
+ * Icons for the phones' bottom tab bar, drawn in the Pacewise style: rounded, even line icons that turn into a
  * filled version on the selected tab (the details are then cut out in the bar's own colour). Original drawings,
  * one consistent set, 24 × 24.
  */
-export type TabIconName = "tasks" | "habits" | "calendar" | "profile" | "alerts" | "more";
+export type TabIconName = "tasks" | "habits" | "calendar" | "profile" | "docs" | "tour" | "alerts" | "more";
 
 /** The colour the cut-out details take on a filled icon (the tab bar's background). */
 const CUT = "rgb(var(--canvas))";
@@ -45,6 +45,19 @@ export function TabIcon({ name, active, className = "h-[26px] w-[26px]" }: { nam
         <>
           <circle cx="12" cy="8" r="3.9" {...body} />
           <path d="M4.6 20.25c.55-4.05 3.6-6.6 7.4-6.6s6.85 2.55 7.4 6.6z" {...body} />
+        </>
+      )}
+      {name === "docs" && (
+        <>
+          <path d="M6.5 2.75h7.25L18.75 7.75v11.5a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2V4.75a2 2 0 0 1 2-2z" {...body} />
+          <path d="M13.5 3v3.5a1.25 1.25 0 0 0 1.25 1.25h3.75" {...cut} />
+          <path d="M8 12.25h7M8 16h5" {...cut} />
+        </>
+      )}
+      {name === "tour" && (
+        <>
+          <circle cx="12" cy="12" r="8.75" {...body} />
+          <path d="M15.4 8.6l-1.9 4.9-4.9 1.9 1.9-4.9z" fill={active ? CUT : "none"} stroke={active ? CUT : "currentColor"} strokeWidth={1.75} strokeLinejoin="round" />
         </>
       )}
       {name === "alerts" && (

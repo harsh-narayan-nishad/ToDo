@@ -177,14 +177,14 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   return (
     <div className="flex flex-col gap-8 pb-40">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Stat className="ios-card" label="Done today" value={plannedToday.length ? `${doneToday} / ${plannedToday.length}` : "–"} hint={plannedToday.length && doneToday === plannedToday.length ? "Everything done. Nice." : undefined} />
-        <Stat className="ios-card" label="Perfect days in a row" value={perfect} hint="Every planned habit done" />
-        <div className="col-span-2 lg:col-span-1"><Stat className="ios-card" label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} /></div>
+        <Stat className="pw-card" label="Done today" value={plannedToday.length ? `${doneToday} / ${plannedToday.length}` : "–"} hint={plannedToday.length && doneToday === plannedToday.length ? "Everything done. Nice." : undefined} />
+        <Stat className="pw-card" label="Perfect days in a row" value={perfect} hint="Every planned habit done" />
+        <div className="col-span-2 lg:col-span-1"><Stat className="pw-card" label="Last 30 days" value={score === null ? "–" : `${score}%`} hint={bestNow.n ? `Longest streak now: ${bestNow.name}, ${bestNow.n}` : "Planned days done"} /></div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Phones: an iOS segmented control and a blue New habit button. */}
-        <div className="w-full md:hidden"><Segmented ios label="Habit type" value={filter} options={FILTERS} onChange={setFilter} /></div>
+        {/* Phones: a segmented control and a blue New habit button. */}
+        <div className="w-full md:hidden"><Segmented soft label="Habit type" value={filter} options={FILTERS} onChange={setFilter} /></div>
         <div className="hidden md:block"><Segmented label="Habit type" value={filter} options={FILTERS} onChange={setFilter} /></div>
         <button type="button" onClick={() => setEditing({ preset: filter === "sleep" ? sleepPreset() : filter === "quit" ? { kind: "quit" } : filter !== "all" ? { scale: filter } : undefined })}
           className="inline-flex h-10 items-center gap-2 rounded-full bg-[#3478F6] px-5 text-[15px] font-medium text-white shadow-themed active:scale-[0.97] md:hidden">
@@ -235,7 +235,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
       )}
 
       {filter === "all" && active.length > 0 && (
-        <Card className="ios-card">
+        <Card className="pw-card">
           <h3 className="mb-4 text-sm uppercase tracking-wide text-ink-muted">All habits, last 26 weeks</h3>
           <HabitGrid cells={overall} />
         </Card>
@@ -307,7 +307,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
-    <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "ios-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5")}>
+    <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "pw-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5")}>
       {/* The same tick box as a task. On a count or time habit it fills the goal in one go (or clears it). */}
       <button type="button" onClick={() => (amount ? onAmount(done ? 0 : goal(h)) : onToggle())} aria-pressed={done}
         aria-label={done ? `Undo ${h.name}` : h.kind === "quit" ? `Avoided ${h.name} today` : `Mark ${h.name} as done`}
@@ -358,8 +358,8 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
           )}
           {onDelete && (
             <button type="button" onClick={onDelete} aria-label={`Delete ${h.name}`} title="Delete this habit"
-              className="ios-circle-btn grid h-9 w-9 shrink-0 place-items-center rounded-full active:scale-95">
-              <Trash2 className="h-4 w-4 text-[#FF3B30]" />
+              className="pw-circle-btn grid h-9 w-9 shrink-0 place-items-center rounded-full active:scale-95">
+              <Trash2 className="h-4 w-4 text-[#F2453D]" />
             </button>
           )}
         </div>

@@ -114,7 +114,7 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
         <h3 className="font-display text-3xl leading-tight tracking-[-0.03em] text-ink sm:text-5xl">Consistency.</h3>
         <span className="shrink-0 text-sm sm:text-base" style={{ color: BRAND_BLUE }}>Last {MONTHS_TO_SHOW} months</span>
       </div>
-      <div className="ios-card rounded-[32px] border border-overlay/10 bg-canvas-raised px-4 pb-8 pt-8 sm:px-10 sm:pt-12">
+      <div className="pw-card rounded-[32px] border border-overlay/10 bg-canvas-raised px-4 pb-8 pt-8 sm:px-10 sm:pt-12">
         <div key={slide} className="glass-in mx-auto max-w-xl text-center" aria-live="polite">
           <p className="font-display text-2xl leading-[1.15] tracking-[-0.03em] text-ink sm:text-4xl">{current.line1}</p>
           <p className="mt-1 font-display text-2xl leading-[1.15] tracking-[-0.03em] text-ink-muted sm:text-4xl">{current.line2}</p>

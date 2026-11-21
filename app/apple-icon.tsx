@@ -1,13 +1,13 @@
 import { ImageResponse } from "next/og";
 
 /**
- * The home-screen icon for iPhone / iPad ("Add to Home Screen"): the same design as app/icon.svg, drawn full-bleed
- * (iOS rounds the corners itself).
+ * The home-screen icon ("Add to Home Screen" on phones and tablets): the same design as app/icon.svg, drawn full-bleed
+ * (the phone rounds the corners itself).
  */
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-export default function AppleIcon() {
+export default function HomeScreenIcon() {
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #FFB547 0%, #FF7A45 55%, #EF4F5E 100%)" }}>

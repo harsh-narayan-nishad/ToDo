@@ -859,8 +859,8 @@
   padding: 0;
 }
 .pw-calendar .pw-year__name:hover { text-decoration: underline; }
-/* The current month, like Apple Calendar: its name in red. */
-.pw-calendar .pw-year__month.is-current .pw-year__name { color: #FF3B30; }
+/* The current month: its name in red. */
+.pw-calendar .pw-year__month.is-current .pw-year__name { color: #F2453D; }
 .pw-calendar .pw-year__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
 .pw-calendar .pw-year__dow { font-size: 0.65rem; color: rgb(var(--ink-muted)); padding: 2px 0; }
 .pw-calendar .pw-year__day {
@@ -983,7 +983,7 @@
 .pw-calendar .pw-year__name { font-family: 'Roobert', 'Inter', 'Söhne', ui-sans-serif, system-ui, sans-serif; font-weight: 400; font-size: 1.05rem; letter-spacing: -0.01em; }
 .pw-calendar .pw-year { padding: 20px; }
 
-/* ---- Apple Calendar look: edge-to-edge grid, day numbers top right, today as a red dot, tinted event bars ---- */
+/* ---- Calendar look: edge-to-edge grid, day numbers top right, today as a red dot, tinted event bars ---- */
 .pw-calendar .rbc-month-view,
 .pw-calendar .rbc-time-view {
   border: 0;
