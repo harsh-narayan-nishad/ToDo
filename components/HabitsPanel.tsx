@@ -7,13 +7,13 @@ import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
 import OptionWheel from "@/components/OptionWheel";
 import { ClockPopup } from "@/components/TaskDialogs";
-import { YearSelect, yearOptions } from "@/components/GlassDropdown";
-import { HabitDetail, HabitEditor, HabitGrid, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
+import { QuietSelect, YearSelect, yearOptions, type DropdownGroup } from "@/components/GlassDropdown";
+import { HabitDetail, HabitEditor, HabitGrid, habitDayLine, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
 import { ApiError } from "@/lib/api";
 import { readHabitCsv } from "@/lib/habitCsv";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
-  TEMPLATES, averageClock, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
+  TEMPLATES, averageClock, categoryLabel, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
   type EntryIndex, type Habit, type HabitEntry, type HabitInput, type HabitScale,
 } from "@/lib/habits";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,8 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   const [showArchived, setShowArchived] = useState(false);
   /** The year the consistency grids show (All habits and each habit's own), picked in their year dropdown. */
   const [year, setYear] = useState(() => Number(today().slice(0, 4)));
+  /** What the consistency grid shows: "all", a type ("cat:learning") or one habit ("habit:<id>"). */
+  const [scope, setScope] = useState("all");
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -198,17 +200,55 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 
   /** This year back to the year of the oldest habit (at least two years back), for the year dropdown. */
   const years = useMemo(() => yearOptions((habits ?? []).reduce((y, h) => Math.min(y, Number(h.startDay.slice(0, 4)) || y), Number(now.slice(0, 4)))), [habits, now]);
-  /** All habits together, one calendar year: the share of planned habits done each day. */
+  /** The habits the consistency grid covers: those of the filter at the top (All, Micro, Daily, Macro, Quit). */
+  const base = useMemo(() => (filter === "all" ? active : active.filter((h) => h.kind !== "sleep" && (filter === "quit" ? h.kind === "quit" : h.scale === filter))), [active, filter]);
+  const allLabel = filter === "all" ? "All habits" : `All ${FILTERS.find((f) => f.id === filter)?.label.toLowerCase() ?? ""} habits`;
+  /** The grid's dropdown: all of them, each type (category) in use, and each habit. */
+  const scopeGroups = useMemo<DropdownGroup[]>(() => {
+    const cats = [...new Set(base.map((h) => h.category))];
+    return [
+      { title: "", items: [{ id: "all", label: allLabel }] },
+      ...(cats.length ? [{ title: "Types", items: cats.map((c) => ({ id: `cat:${c}`, label: categoryLabel(c), meta: String(base.filter((h) => h.category === c).length) })) }] : []),
+      { title: "Habits", items: base.map((h) => ({ id: `habit:${h.id}`, label: h.name })) },
+    ];
+  }, [base, allLabel]);
+  // A habit archived (or a type left empty) since it was picked goes back to all habits.
+  const scopeOk = scope === "all" || scopeGroups.some((g) => g.items.some((i) => i.id === scope));
+  const shownScope = scopeOk ? scope : "all";
+  const scopeLabel = scopeGroups.flatMap((g) => g.items).find((i) => i.id === shownScope)?.label ?? allLabel;
+  /**
+   * The chosen habits (all, a type, or one), one calendar year: the share of planned habits done each day, and in
+   * the day's tooltip which ones were done.
+   */
   const overall = useMemo(() => {
+    const pool = shownScope === "all" ? base
+      : shownScope.startsWith("cat:") ? base.filter((h) => h.category === shownScope.slice(4))
+      : base.filter((h) => h.id === shownScope.slice(6));
     const out = [];
     for (let d = `${year}-01-01`; d <= `${year}-12-31`; d = addDays(d, 1)) {
       if (d > now) { out.push({ day: d, level: 0, off: true, title: `${longDay(d)}: not yet` }); continue; }
-      const planned = active.filter((h) => isDue(h, d, index.get(h.id)?.get(d)));
+      if (pool.length === 1) {
+        const h = pool[0];
+        const e = index.get(h.id)?.get(d);
+        const planned = isPlanned(h, d);
+        const label = e?.skipped ? "skipped" : e ? (h.kind === "count" ? `${e.value} ${h.unit}`.trim() : h.kind === "duration" || h.kind === "sleep" ? minutesLabel(e.value) : "done") : planned ? "missed" : "not planned";
+        out.push({ day: d, level: levelOf(progress(h, e)), off: (!planned && !e) || !!e?.skipped, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}`, lines: planned || e ? [habitDayLine(h, e, d, now)] : [] });
+        continue;
+      }
+      const planned = pool.filter((h) => isDue(h, d, index.get(h.id)?.get(d)));
       const done = planned.filter((h) => isDone(h, index.get(h.id)?.get(d))).length;
-      out.push({ day: d, level: planned.length ? levelOf(done / planned.length) : 0, off: !planned.length, title: `${longDay(d)}: ${planned.length ? `${done} of ${planned.length} habits` : "no habits planned"}` });
+      // Any habit practised that day counts, whatever its type and even on a day it was not planned: the day shows
+      // how much of everything practised or planned was done, and is never empty once something was practised.
+      const practised = pool.filter((h) => progress(h, index.get(h.id)?.get(d)) > 0);
+      const counted = new Set([...planned, ...practised]);
+      const share = counted.size ? practised.reduce((a, h) => a + progress(h, index.get(h.id)?.get(d)), 0) / counted.size : 0;
+      // Every habit of the day in the card: the planned ones, and any checked in on a day it was not planned.
+      const lines = pool.filter((h) => isPlanned(h, d) || index.get(h.id)?.has(d)).map((h) => habitDayLine(h, index.get(h.id)?.get(d), d, now));
+      out.push({ day: d, level: practised.length ? Math.max(1, levelOf(share)) : 0, off: !counted.size,
+        title: `${longDay(d)}: ${!counted.size ? "no habits planned" : `${practised.length} practised${planned.length ? ` · ${done} of ${planned.length} planned done` : ""}`}`, lines });
     }
     return out;
-  }, [active, index, now, year]);
+  }, [base, index, now, year, shownScope]);
 
   if (!habits) return <PanelLoader label="Loading habits" />;
 
@@ -286,10 +326,10 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
         </>
       )}
 
-      {filter === "all" && active.length > 0 && (
+      {filter !== "sleep" && base.length > 0 && (
         <Card className="pw-card">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-sm uppercase tracking-wide text-ink-muted">All habits</h3>
+            <QuietSelect value={shownScope} display={scopeLabel} groups={scopeGroups} onSelect={setScope} label="Show" className="text-sm uppercase tracking-wide text-ink-muted" />
             <YearSelect year={year} years={years} onChange={setYear} className="text-sm text-ink-muted" />
           </div>
           <HabitGrid cells={overall} />

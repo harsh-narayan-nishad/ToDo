@@ -20,15 +20,18 @@ export interface DropdownGroup { title: string; items: DropdownItem[] }
 
 type Pos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number; /** where the button is */ a: { top: number; left: number; width: number; height: number } };
 
-export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0, soft = false, ghost }: {
+export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0, soft = false, ghost, backdrop = true }: {
   anchor: React.RefObject<HTMLElement>; groups: DropdownGroup[]; value: string; onSelect: (id: string) => void; onClose: () => void; label: string; minWidth?: number;
   /** A pull-down menu: rounded frosted panel, full-width rows with thin separators, a tick on the chosen one. */
   soft?: boolean;
   /** Pull-down style: the button as it looks, drawn sharp above the dimmed screen at the button's place (the real one is under the blur). */
   ghost?: React.ReactNode;
+  /** Pull-down style: false = no dimmed, blurred screen behind (the page stays clearly visible). */
+  backdrop?: boolean;
 }) {
+  const backdropOn = backdrop;
   const menu = useRef<HTMLDivElement>(null);
-  const backdrop = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Pos | null>(null);
 
@@ -49,7 +52,7 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       // the backdrop and the button's copy close on their own click, so the tap goes nowhere else
-      if ((backdrop.current && e.target === backdrop.current) || ghostRef.current?.contains(e.target as Node)) return;
+      if ((backdropRef.current && e.target === backdropRef.current) || ghostRef.current?.contains(e.target as Node)) return;
       if (!menu.current?.contains(e.target as Node) && !anchor.current?.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); anchor.current?.focus(); } };
@@ -83,7 +86,7 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
   return createPortal(
     <>
     {/* Pull-down style: the screen behind dims and blurs while the menu is open; a tap there closes it (and reaches nothing underneath). */}
-    {soft && <div ref={backdrop} className="pw-menu-backdrop fade-in fixed inset-0 z-[155]" aria-hidden onClick={onClose} />}
+    {soft && backdropOn && <div ref={backdropRef} className="pw-menu-backdrop fade-in fixed inset-0 z-[155]" aria-hidden onClick={onClose} />}
     {soft && ghost && (
       <div ref={ghostRef} className="fixed z-[158] cursor-pointer" style={pos.a} aria-hidden onClick={onClose}>{ghost}</div>
     )}
@@ -213,7 +216,23 @@ export function YearSelect({ year, years, onChange, className, style }: { year: 
         <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")} strokeWidth={2} aria-hidden />
       </button>
       {open && <DropdownMenu anchor={trigger} groups={[{ title: "", items: years.map((y) => ({ id: String(y), label: String(y) })) }]} value={String(year)}
-        onSelect={(id) => { onChange(Number(id)); setOpen(false); }} onClose={() => setOpen(false)} label="Year" minWidth={120} />}
+        onSelect={(id) => { onChange(Number(id)); setOpen(false); }} onClose={() => setOpen(false)} label="Year" minWidth={160} soft backdrop={false} />}
+    </>
+  );
+}
+
+/** A value shown as quiet text with a ⌄ (a heading that is also a choice), opening the app's dropdown. */
+export function QuietSelect({ value, display, groups, onSelect, label, className }: { value: string; display: string; groups: DropdownGroup[]; onSelect: (id: string) => void; label: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${display}`}
+        className={cn("inline-flex min-w-0 items-center gap-1 text-left outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium", className)}>
+        <span className="truncate">{display}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-200", open && "rotate-180")} strokeWidth={2} aria-hidden />
+      </button>
+      {open && <DropdownMenu anchor={trigger} groups={groups} value={value} onSelect={(id) => { onSelect(id); setOpen(false); }} onClose={() => setOpen(false)} label={label} minWidth={240} soft backdrop={false} />}
     </>
   );
 }

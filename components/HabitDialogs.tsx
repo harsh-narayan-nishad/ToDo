@@ -321,8 +321,29 @@ const GRID_CELL = 11;
 const GRID_GAP = 3;
 const GRID_GREEN = ["bg-overlay/10", "bg-accent-medium/30", "bg-accent-medium/55", "bg-accent-medium/80", "bg-accent-medium"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export function HabitGrid({ cells }: { cells: { day: string; level: number; title: string; off?: boolean }[] }) {
+const HOVER_CARD = "rounded-2xl border border-overlay/10 bg-canvas-raised px-3.5 py-2.5 text-[13px] leading-snug text-ink shadow-themed";
+
+/** One habit on one day, for a grid's day card: "✓ Read · 20 min", "✗ Walk · missed", "– Floss · skipped". */
+export function habitDayLine(h: Habit, e: HabitEntry | null | undefined, day: string, now: string): string {
+  const amount = e && !e.skipped ? (h.kind === "count" ? `${e.value.toLocaleString()}${h.unit ? ` ${h.unit}` : ""} of ${h.target.toLocaleString()}` : h.kind === "duration" || h.kind === "sleep" ? `${minutesLabel(e.value)} of ${minutesLabel(h.target)}` : h.kind === "quit" ? "avoided" : "done") : "";
+  if (e?.skipped) return `– ${h.name} · skipped`;
+  if (isDone(h, e)) return `✓ ${h.name} · ${amount}`;
+  if (e) return `◐ ${h.name} · ${amount}`;
+  return `✗ ${h.name} · ${day === now ? "not yet" : "missed"}`;
+}
+
+export function HabitGrid({ cells }: { cells: { day: string; level: number; title: string; off?: boolean; /** The day's habits, one line each, in the day card. */ lines?: string[] }[] }) {
   const scroller = useRef<HTMLDivElement>(null);
+  /** The day card: shown on hover, and kept open by a click / tap (click again or anywhere else to close). */
+  const [card, setCard] = useState<{ i: number; x: number; y: number; pinned: boolean } | null>(null);
+  useEffect(() => {
+    if (!card?.pinned) return;
+    const close = (e: Event) => { if (!(e.target instanceof Element && e.target.closest("[data-habit-cell]"))) setCard(null); };
+    const hide = () => setCard(null);
+    document.addEventListener("pointerdown", close, true);
+    window.addEventListener("scroll", hide, true);
+    return () => { document.removeEventListener("pointerdown", close, true); window.removeEventListener("scroll", hide, true); };
+  }, [card?.pinned]);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -347,10 +368,12 @@ export function HabitGrid({ cells }: { cells: { day: string; level: number; titl
     return MONTH_SHORT[mo];
   });
   const cols = `repeat(${weeks.length}, ${GRID_CELL}px)`;
+  const at = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top }; };
+  const shownCell = card ? cells[card.i] : null;
   return (
     <div>
       <div className="flex justify-center">
-        <div ref={scroller} className="max-w-full overflow-x-auto pb-2">
+        <div ref={scroller} className="max-w-full overflow-x-auto px-1 pb-2 pt-1">
           <div className="inline-flex flex-col gap-2">
             <div className="grid" style={{ gridTemplateColumns: cols, columnGap: GRID_GAP }}>
               {labels.map((l, wi) => <div key={wi} className="relative h-4 overflow-visible whitespace-nowrap text-xs text-ink-muted">{l && <span className="absolute left-0">{l}</span>}</div>)}
@@ -359,8 +382,17 @@ export function HabitGrid({ cells }: { cells: { day: string; level: number; titl
               {weeks.map((w, wi) => (
                 <div key={wi} className="grid" style={{ gridTemplateRows: `repeat(7, ${GRID_CELL}px)`, rowGap: GRID_GAP }}>
                   {w.map((c, di) => c
-                    ? <span key={c.day} data-today={c.day === now || undefined} title={c.title} aria-label={c.title} style={{ width: GRID_CELL, height: GRID_CELL }}
-                        className={cn("rounded-[2px]", c.off ? "border border-dashed border-overlay/15" : GRID_GREEN[c.level], c.day === now && "ring-2 ring-ink/70 ring-offset-1 ring-offset-canvas")} />
+                    ? <span key={c.day} data-today={c.day === now || undefined} data-habit-cell role="button" tabIndex={0} aria-label={[c.title, ...(c.lines ?? [])].join(", ")} style={{ width: GRID_CELL, height: GRID_CELL }}
+                        onMouseEnter={(e) => { const p = at(e.currentTarget); const i = cells.indexOf(c); setCard((k) => (k?.pinned ? k : { i, ...p, pinned: false })); }}
+                        onMouseLeave={() => setCard((k) => (k?.pinned ? k : null))}
+                        onFocus={(e) => { const p = at(e.currentTarget); const i = cells.indexOf(c); setCard((k) => (k?.pinned ? k : { i, ...p, pinned: false })); }}
+                        onBlur={() => setCard((k) => (k?.pinned ? k : null))}
+                        onClick={(e) => { const p = at(e.currentTarget); const i = cells.indexOf(c); setCard((k) => (k?.pinned && k.i === i ? null : { i, ...p, pinned: true })); }}
+                        onKeyDown={(e) => { if (e.key === "Escape") setCard(null); }}
+                        className={cn("rounded-[2px]",
+                          // Today: a hairline outline with a 1px gap (transparent, so it suits any card), around a solid cell.
+                          c.day === now ? cn(c.off ? "bg-overlay/10" : GRID_GREEN[c.level], "outline outline-1 outline-offset-1 outline-ink/40")
+                            : c.off ? "border border-dashed border-overlay/15" : GRID_GREEN[c.level])} />
                     : <span key={`e${di}`} style={{ width: GRID_CELL, height: GRID_CELL }} />)}
                 </div>
               ))}
@@ -374,6 +406,14 @@ export function HabitGrid({ cells }: { cells: { day: string; level: number; titl
         <span>High</span>
         <span className="ml-3 h-[11px] w-[11px] rounded-[2px] border border-dashed border-overlay/15" /> <span>Not planned</span>
       </div>
+      {card && shownCell && createPortal(
+        <div role="tooltip" className={cn("pointer-events-none fixed z-[200] max-w-[min(320px,calc(100vw-24px))] -translate-y-full", HOVER_CARD)}
+          style={{ left: Math.min(Math.max(12, card.x - 160), window.innerWidth - Math.min(320, window.innerWidth - 24) - 12), top: card.y - 8 }}>
+          <div className="mb-1 font-display text-base tracking-[-0.02em] text-ink">{shownCell.title}</div>
+          {(shownCell.lines ?? []).map((l, i) => <div key={i} className="text-ink-muted">{l}</div>)}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -393,7 +433,7 @@ export function HabitDetail({ habit: h, byDay, year, years, onYear, onClose, onE
       const planned = isPlanned(h, d);
       if (d > now) { out.push({ day: d, level: 0, off: true, title: `${longDay(d)}: not yet` }); continue; }
       const label = e?.skipped ? "skipped" : e ? (h.kind === "count" ? `${e.value} ${h.unit}`.trim() : h.kind === "duration" || h.kind === "sleep" ? minutesLabel(e.value) : "done") : planned ? "missed" : "not planned";
-      out.push({ day: d, level: levelOf(progress(h, e)), off: (!planned && !e) || !!e?.skipped, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}` });
+      out.push({ day: d, level: levelOf(progress(h, e)), off: (!planned && !e) || !!e?.skipped, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}`, lines: planned || e ? [habitDayLine(h, e, d, now)] : [] });
     }
     return out;
   }, [h, byDay, now, year]);

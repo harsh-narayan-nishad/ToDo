@@ -38,7 +38,6 @@ export function planProblem(p: Plan, now = nowLocal(), check = { start: true, du
     const span = diff(p.startDay, p.dueDay) * DAY_MINUTES + toMin(p.endTime) - toMin(p.startTime);
     if (p.startDay === p.dueDay && span <= 0) return "The end time must be after the start time.";
     if (span < MIN_TIMED_MINUTES) return `A timed task must last at least ${MIN_TIMED_MINUTES} minutes.`;
-    if (check.due && p.dueDay === now.day && toMin(p.endTime) <= now.minutes) return "That time has already passed today. Pick a later end time.";
   }
   return null;
 }
