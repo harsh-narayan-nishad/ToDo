@@ -56,7 +56,7 @@ function loadDraft(now: string): Draft | null {
 }
 const clearDraft = () => { try { localStorage.removeItem(PLANNER_DRAFT_KEY); } catch { /* storage blocked */ } };
 
-export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () => void; onCreated: (tasks: Task[]) => void; neet?: boolean }) {
+export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { onClose: () => void; onCreated: (tasks: Task[]) => void; neet?: boolean; /** The Contests menu, beside Import CSV. */ contests?: React.ReactNode }) {
   const now = today();
   const quick = useMemo(() => presets(now), [now]);
   const [draft] = useState(() => loadDraft(now));
@@ -207,7 +207,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
 
               {/* 2. Tasks */}
               <Section n={2} title="Tasks">
-                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)}
+                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)} toolbar={contests}
                   onImportPlan={(p) => {
                     const f = p.from ?? from;
                     if (p.from) setFrom(p.from);

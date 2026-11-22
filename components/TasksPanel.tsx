@@ -180,14 +180,12 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
             ...(tasks ? [{ title: "", items: [{ id: "overview", label: "Overview" }] }] : []),
           ]}
           onSelect={(id) => (id === "overview" ? setOverview(true) : setFilter(id as Filter))} />
-        {contestToggle}
       </div>
       <div className="hidden flex-wrap items-center gap-2 md:flex">
         {(["open", "done", "all"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "primary" : "outline"} onClick={() => setFilter(f)}>{f === "open" ? "To do" : f === "done" ? "Done" : "All"}</Button>
         ))}
         {tasks && <Button size="sm" variant="outline" onClick={() => setOverview(true)}><BarChart3 className="h-4 w-4" />Overview</Button>}
-        {contestToggle}
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
@@ -217,7 +215,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       {overview && <TaskOverview tasks={tasks ?? []} onClose={() => setOverview(false)} />}
       {/* + opens the task planner: every task is added there (one task or many, over one day or many). */}
       <AddButton onClick={() => setPlanning(true)} />
-      {planning && <TaskPlanner neet={neet} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
+      {planning && <TaskPlanner neet={neet} contests={contestToggle || undefined} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
 
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
       {logging && (

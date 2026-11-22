@@ -263,7 +263,7 @@ const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none plac
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
 const TD = "border-b border-r border-overlay/10 p-0 transition-[background-color,box-shadow] duration-150 focus-within:bg-overlay/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgb(var(--ink)/0.45)]";
 
-export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, onImportPlan }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string; /** Gets the When settings an imported CSV fills in (Plan From / To / Repeat / Days). */ onImportPlan?: (plan: PlanSettings) => void }) {
+export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, onImportPlan, toolbar }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string; /** Gets the When settings an imported CSV fills in (Plan From / To / Repeat / Days). */ onImportPlan?: (plan: PlanSettings) => void; /** Shown in the Import CSV row, on the right (the Contests menu). */ toolbar?: React.ReactNode }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [clockFor, setClockFor] = useState<{ key: number; which: "from" | "to" } | null>(null);
@@ -338,6 +338,7 @@ export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, on
         </button>
         <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,.xlsx,.xls,.ods,.numbers" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
+        {toolbar && <div className="ml-auto">{toolbar}</div>}
       </div>
       {notice && <p className="text-xs text-ink-muted" role="status">{notice}</p>}
 
