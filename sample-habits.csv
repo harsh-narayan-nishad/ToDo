@@ -1,0 +1,8 @@
+Name,Type,Size,Category,Goal,Unit,Days,Time,Cue
+Make the bed,Yes/no,Micro,Home,,,Every day,6:30 AM,As soon as I get up
+Drink water,Count,Daily,Health,8,glasses,Every day,,
+Read,Time,Daily,Learning,20 min,,Every day,9:00 PM,After dinner
+Workout,Time,Macro,Fitness,45,,"Mon, Wed, Fri",6:00 AM,
+No phone in the first hour,Quit,Daily,Mind,,,Every day,,
+Sleep,Sleep,Daily,Sleep,8 h,,Every day,,Screens off 30 minutes before bed
+Weekly review,Yes/no,Macro,Work,,,Sun,7:00 PM,Sunday evening

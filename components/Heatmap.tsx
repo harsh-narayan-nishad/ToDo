@@ -2,10 +2,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HeatDay, Summary } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { YearSelect, yearOptions } from "@/components/GlassDropdown";
 
 /**
- * The consistency graph, matched to Pacewise's (Pacewise/components/Analytics/ContributionHeatmap.tsx): the last
- * 12 months built month by month (each month starts in a new column, day 1 on its real weekday), month labels on
+ * The consistency graph, matched to Pacewise's (Pacewise/components/Analytics/ContributionHeatmap.tsx): one
+ * calendar year (picked in the year dropdown) built month by month (each month starts in a new column, day 1 on its real weekday), month labels on
  * top, four levels of green, dashed future days, a ring on today, an instant hover card, and a line above the grid
  * you page through with the dots underneath (current streak, longest streak, active days, total time).
  * Clicking a day opens it in History.
@@ -15,7 +16,6 @@ const LEVEL_CLASS: Record<Level, string> = { 0: "bg-overlay/10", 1: "bg-accent-m
 const LEVEL_LABEL: Record<Level, string> = { 0: "No activity", 1: "Low", 2: "Medium", 3: "High" };
 const BRAND_BLUE = "#306fdb";
 const HOVER_CARD_CLASS = "rounded-2xl border border-overlay/10 bg-canvas-raised px-3.5 py-2.5 text-[13px] leading-snug text-ink shadow-themed";
-const MONTHS_TO_SHOW = 12;
 const CELL_PX = 11;
 const GAP_PX = 3;
 
@@ -65,7 +65,17 @@ function PagerPill({ count, index, onSelect, labels }: { count: number; index: n
 export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary: Summary; onOpenDay: (day: string) => void }) {
   /** Opens scrolled to the end, so the current month and today are in view (older months are a scroll to the left). */
   const scroller = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [days.length]);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  /** This year back to the earliest year the server sends (at least two years back). */
+  const years = useMemo(() => yearOptions(days.length ? Number(days[0].day.slice(0, 4)) : undefined), [days]);
+  // This year opens on today; an earlier year opens at its start.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (year !== new Date().getFullYear()) { el.scrollLeft = 0; return; }
+    const t = el.querySelector<HTMLElement>("[data-today]");
+    el.scrollLeft = t ? Math.max(0, el.scrollLeft + t.getBoundingClientRect().left - el.getBoundingClientRect().left - el.clientWidth + 48) : el.scrollWidth;
+  }, [days.length, year]);
   const [slide, setSlide] = useState(0);
   const [hovered, setHovered] = useState<{ day: DayCell; x: number; y: number } | null>(null);
   const byDay = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
@@ -74,10 +84,9 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const cols: GridCell[][] = [];
-    for (let m = MONTHS_TO_SHOW - 1; m >= 0; m--) {
-      const monthStart = new Date(today.getFullYear(), today.getMonth() - m, 1);
-      const year = monthStart.getFullYear();
-      const month = monthStart.getMonth();
+    for (let m = 0; m < 12; m++) {
+      const monthStart = new Date(year, m, 1);
+      const month = m;
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const flat: GridCell[] = Array<null>(monthStart.getDay()).fill(null); // weekday of the 1st (0 = Sunday)
       for (let d = 1; d <= daysInMonth; d++) {
@@ -90,7 +99,7 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
       for (let i = 0; i < flat.length; i += 7) cols.push(flat.slice(i, i + 7));
     }
     return cols;
-  }, [byDay]);
+  }, [byDay, year]);
 
   const monthLabels = useMemo(() => weeks.map((col) => {
     const first = col.find((c) => c && c.date.getDate() === 1) as DayCell | undefined;
@@ -112,7 +121,7 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
     <section aria-label="Consistency">
       <div className="mb-4 flex items-baseline justify-between gap-3 px-1">
         <h3 className="font-display text-3xl leading-tight tracking-[-0.03em] text-ink sm:text-5xl">Consistency.</h3>
-        <span className="shrink-0 text-sm sm:text-base" style={{ color: BRAND_BLUE }}>Last {MONTHS_TO_SHOW} months</span>
+        <YearSelect year={year} years={years} onChange={setYear} className="text-sm sm:text-base" style={{ color: BRAND_BLUE }} />
       </div>
       <div className="pw-card rounded-[32px] border border-overlay/10 bg-canvas-raised px-4 pb-8 pt-8 sm:px-10 sm:pt-12">
         <div key={slide} className="glass-in mx-auto max-w-xl text-center" aria-live="polite">
@@ -140,7 +149,7 @@ export function Heatmap({ days, summary, onOpenDay }: { days: HeatDay[]; summary
                         const level = levelFor(cell.entry);
                         const show = (el: HTMLElement) => { const r = el.getBoundingClientRect(); setHovered({ day: cell, x: r.left + r.width / 2, y: r.top }); };
                         return (
-                          <button key={cell.key} type="button" aria-label={tooltipLines(cell).join(", ")} style={{ width: CELL_PX, height: CELL_PX }}
+                          <button key={cell.key} type="button" data-today={cell.isToday || undefined} aria-label={tooltipLines(cell).join(", ")} style={{ width: CELL_PX, height: CELL_PX }}
                             onClick={() => onOpenDay(cell.key)}
                             onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setHovered(null)}
                             onFocus={(e) => show(e.currentTarget)} onBlur={() => setHovered(null)}

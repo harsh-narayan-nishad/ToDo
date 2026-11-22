@@ -193,3 +193,27 @@ export function CellSelect({ value, display, groups, onSelect, label, disabled, 
     </>
   );
 }
+
+/** Years to pick a consistency grid by: this year back to `earliest` (at least the two years before this one), newest first. */
+export function yearOptions(earliest?: number): number[] {
+  const now = new Date().getFullYear();
+  const from = Math.min(now - 2, earliest ?? now);
+  return Array.from({ length: now - from + 1 }, (_, i) => now - i);
+}
+
+/** A year shown as quiet text with a ⌄ (where a grid's range label sits), opening the app's dropdown of years. */
+export function YearSelect({ year, years, onChange, className, style }: { year: number; years: number[]; onChange: (y: number) => void; className?: string; style?: React.CSSProperties }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`Year: ${year}`}
+        className={cn("inline-flex shrink-0 items-center gap-1 outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium", className)} style={style}>
+        <span className="tabular-nums">{year}</span>
+        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")} strokeWidth={2} aria-hidden />
+      </button>
+      {open && <DropdownMenu anchor={trigger} groups={[{ title: "", items: years.map((y) => ({ id: String(y), label: String(y) })) }]} value={String(year)}
+        onSelect={(id) => { onChange(Number(id)); setOpen(false); }} onClose={() => setOpen(false)} label="Year" minWidth={120} />}
+    </>
+  );
+}

@@ -37,6 +37,38 @@ const HEADERS: Record<Col, RegExp> = {
   to: /^(to|end|end ?time|until|ends?)$/i,
 };
 
+/**
+ * Columns a CSV can have besides the grid's own: All day (per row) and the planner's When settings
+ * (Plan From, Plan To, Plan Repeat, Plan Days), read from the first row that fills them in.
+ */
+type ExtraCol = "allday" | "planFrom" | "planTo" | "planRepeat" | "planDays";
+type AnyCol = Col | ExtraCol;
+const EXTRA_HEADERS: Record<ExtraCol, RegExp> = {
+  allday: /^(all[ -]?day|whole ?day)$/i,
+  planFrom: /^(plan ?(from|start|first ?day)|range ?(from|start)|first ?day)$/i,
+  planTo: /^(plan ?(to|end|last ?day)|range ?(to|end)|last ?day)$/i,
+  planRepeat: /^plan ?repeat$/i,
+  planDays: /^(plan ?days|plan ?weekdays|days of (the )?week)$/i,
+};
+
+/** The planner's When settings, as read from a CSV (only what the file fills in). */
+export interface PlanSettings { from?: string; to?: string; repeat?: Repeat; picked?: boolean[] }
+
+const parseYesNo = (raw: string): boolean | null => {
+  const v = raw.trim().toLowerCase();
+  if (/^(y|yes|true|1|x|✓|✔|on)$/.test(v)) return true;
+  if (/^(n|no|false|0|off)$/.test(v)) return false;
+  return null;
+};
+
+/** "Mon Wed Fri", "Mon, Wed, Fri", "mon;wed;fri" → Mon … Sun flags; null if no weekday is named. */
+const parseWeekdays = (raw: string): boolean[] | null => {
+  const names = ["mo", "tu", "we", "th", "fr", "sa", "su"];
+  const out = [false, false, false, false, false, false, false];
+  raw.toLowerCase().split(/[\s,;|/]+/).forEach((w) => { const i = names.indexOf(w.slice(0, 2)); if (i >= 0) out[i] = true; });
+  return out.some(Boolean) ? out : null;
+};
+
 // ---- parsing ------------------------------------------------------------------------------
 
 /** CSV / TSV with quoted cells ("a, b", "say ""hi"""), as Google Sheets and Excel write and copy them. */
@@ -134,22 +166,52 @@ function setCell(row: SheetRow, col: Col, raw: string): SheetRow {
 }
 
 /** If the first row is a header, which column holds what; otherwise null. */
-function headerMap(first: string[]): (Col | null)[] | null {
-  const map = first.map((h) => (Object.keys(HEADERS) as Col[]).find((c) => HEADERS[c].test(h.trim())) ?? null);
+function headerMap(first: string[]): (AnyCol | null)[] | null {
+  const map = first.map((h) =>
+    (Object.keys(HEADERS) as Col[]).find((c) => HEADERS[c].test(h.trim()))
+    ?? (Object.keys(EXTRA_HEADERS) as ExtraCol[]).find((c) => EXTRA_HEADERS[c].test(h.trim()))
+    ?? null);
   return map.includes("title") ? map : null;
+}
+
+/** The When settings from a CSV with a header: each one from the first row that fills it in. */
+export function readPlan(table: string[][]): PlanSettings {
+  const header = headerMap(table[0] ?? []);
+  if (!header) return {};
+  const first = (col: ExtraCol) => {
+    const j = header.indexOf(col);
+    return j < 0 ? "" : table.slice(1).map((cells) => (cells[j] ?? "").trim()).find(Boolean) ?? "";
+  };
+  const plan: PlanSettings = {};
+  const from = parseDay(first("planFrom"));
+  const to = parseDay(first("planTo"));
+  if (from) plan.from = from;
+  if (to) plan.to = to;
+  const days = parseWeekdays(first("planDays"));
+  if (days) plan.picked = days;
+  const rep = first("planRepeat");
+  const r = /^(custom|pick ?days|picked ?days)$/i.test(rep) ? "custom" : parseRepeat(rep);
+  if (r) plan.repeat = r;
+  else if (days) plan.repeat = "custom"; // naming the days means "Pick days"
+  return plan;
 }
 
 /** Puts a pasted / imported table into the rows, starting at row `r`, column `c` (column order of the sheet when there is no header). */
 export function applyTable(rows: SheetRow[], table: string[][], r: number, c: number): SheetRow[] {
   const header = headerMap(table[0] ?? []);
   const body = header ? table.slice(1) : table;
-  const cols: (Col | null)[] = header ?? COLS.slice(c);
+  const cols: (AnyCol | null)[] = header ?? COLS.slice(c);
+  const isCol = (x: AnyCol | null): x is Col => !!x && (COLS as readonly string[]).includes(x);
+  const allDayAt = cols.indexOf("allday");
   const out = [...rows];
   body.forEach((cells, i) => {
     const at = r + i;
     if (at >= MAX_ROWS) return;
     let row = out[at] ?? blankRow();
-    cells.forEach((v, j) => { const col = cols[j]; if (col) row = setCell(row, col, v); });
+    cells.forEach((v, j) => { const col = cols[j]; if (isCol(col)) row = setCell(row, col, v); });
+    // All day last, so it wins over an empty or filled From / To.
+    const allDay = allDayAt >= 0 ? parseYesNo(cells[allDayAt] ?? "") : null;
+    if (allDay !== null) row = { ...row, allDay };
     out[at] = row;
   });
   return out;
@@ -201,7 +263,7 @@ const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none plac
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
 const TD = "border-b border-r border-overlay/10 p-0 transition-[background-color,box-shadow] duration-150 focus-within:bg-overlay/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgb(var(--ink)/0.45)]";
 
-export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string }) {
+export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, onImportPlan }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string; /** Gets the When settings an imported CSV fills in (Plan From / To / Repeat / Days). */ onImportPlan?: (plan: PlanSettings) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [clockFor, setClockFor] = useState<{ key: number; which: "from" | "to" } | null>(null);
@@ -241,7 +303,10 @@ export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat }: 
       const kept = list.filter((r) => r.title.trim() || r.notes.trim());
       return applyTable(kept, table, kept.length, 0);
     });
-    setNotice(`Imported ${headerMap(table[0]) ? table.length - 1 : table.length} rows from ${file.name}.`);
+    const plan = readPlan(table);
+    const planned = Object.keys(plan).length > 0;
+    if (planned) onImportPlan?.(plan);
+    setNotice(`Imported ${headerMap(table[0]) ? table.length - 1 : table.length} rows from ${file.name}${planned && onImportPlan ? ", and the When settings" : ""}. Everything can still be changed.`);
   }
 
   const open = clockFor && rows.find((r) => r.key === clockFor.key);

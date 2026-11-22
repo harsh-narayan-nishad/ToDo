@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, Check, Clock, Flame, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
-import { GlassDropdown } from "@/components/GlassDropdown";
+import { GlassDropdown, YearSelect } from "@/components/GlassDropdown";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import { AnalogClock, ClockPopup } from "@/components/TaskDialogs";
 import { FIELD, LABEL } from "@/components/ui";
@@ -314,8 +314,8 @@ export const levelOf = (share: number) => (share <= 0 ? 0 : share < 0.34 ? 1 : s
 
 /** A neutral GitHub-style grid, one column per week (Monday on top). `cells` run oldest → newest. */
 /**
- * The last 26 weeks as a heatmap, drawn like the Profile's Consistency map: rounded cells, month names on top, a
- * green scale, today outlined, and opened scrolled to the current week.
+ * One calendar year as a heatmap, drawn like the Profile's Consistency map: rounded cells, month names on top, a
+ * green scale, today outlined, and opened scrolled to the current week (an earlier year opens at January).
  */
 const GRID_CELL = 11;
 const GRID_GAP = 3;
@@ -323,7 +323,12 @@ const GRID_GREEN = ["bg-overlay/10", "bg-accent-medium/30", "bg-accent-medium/55
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function HabitGrid({ cells }: { cells: { day: string; level: number; title: string; off?: boolean }[] }) {
   const scroller = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [cells.length]);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const t = el.querySelector<HTMLElement>("[data-today]");
+    el.scrollLeft = t ? Math.max(0, el.scrollLeft + t.getBoundingClientRect().left - el.getBoundingClientRect().left - el.clientWidth + 48) : 0;
+  }, [cells.length, cells[0]?.day]);
   if (!cells.length) return null;
   const now = today();
   const [y, m, d] = cells[0].day.split("-").map(Number);
@@ -354,7 +359,7 @@ export function HabitGrid({ cells }: { cells: { day: string; level: number; titl
               {weeks.map((w, wi) => (
                 <div key={wi} className="grid" style={{ gridTemplateRows: `repeat(7, ${GRID_CELL}px)`, rowGap: GRID_GAP }}>
                   {w.map((c, di) => c
-                    ? <span key={c.day} title={c.title} aria-label={c.title} style={{ width: GRID_CELL, height: GRID_CELL }}
+                    ? <span key={c.day} data-today={c.day === now || undefined} title={c.title} aria-label={c.title} style={{ width: GRID_CELL, height: GRID_CELL }}
                         className={cn("rounded-[2px]", c.off ? "border border-dashed border-overlay/15" : GRID_GREEN[c.level], c.day === now && "ring-2 ring-ink/70 ring-offset-1 ring-offset-canvas")} />
                     : <span key={`e${di}`} style={{ width: GRID_CELL, height: GRID_CELL }} />)}
                 </div>
@@ -373,9 +378,9 @@ export function HabitGrid({ cells }: { cells: { day: string; level: number; titl
   );
 }
 
-/** One habit in full: streaks, score, the last 26 weeks, recent check-ins, and edit / archive / delete. */
-export function HabitDetail({ habit: h, byDay, onClose, onEdit, onArchive, onDelete }: {
-  habit: Habit; byDay?: Map<string, HabitEntry>; onClose: () => void; onEdit: () => void; onArchive: () => Promise<void>; onDelete: () => void;
+/** One habit in full: streaks, score, a year's grid (picked in the year dropdown), recent check-ins, and edit / archive / delete. */
+export function HabitDetail({ habit: h, byDay, year, years, onYear, onClose, onEdit, onArchive, onDelete }: {
+  habit: Habit; byDay?: Map<string, HabitEntry>; year: number; years: number[]; onYear: (y: number) => void; onClose: () => void; onEdit: () => void; onArchive: () => Promise<void>; onDelete: () => void;
 }) {
   const now = today();
   const [busy, setBusy] = useState(false);
@@ -383,15 +388,15 @@ export function HabitDetail({ habit: h, byDay, onClose, onEdit, onArchive, onDel
   const rate = successRate(h, byDay, 30, now);
   const cells = useMemo(() => {
     const out = [];
-    for (let i = 181; i >= 0; i--) {
-      const d = addDays(now, -i);
+    for (let d = `${year}-01-01`; d <= `${year}-12-31`; d = addDays(d, 1)) {
       const e = byDay?.get(d);
       const planned = isPlanned(h, d);
+      if (d > now) { out.push({ day: d, level: 0, off: true, title: `${longDay(d)}: not yet` }); continue; }
       const label = e?.skipped ? "skipped" : e ? (h.kind === "count" ? `${e.value} ${h.unit}`.trim() : h.kind === "duration" || h.kind === "sleep" ? minutesLabel(e.value) : "done") : planned ? "missed" : "not planned";
       out.push({ day: d, level: levelOf(progress(h, e)), off: (!planned && !e) || !!e?.skipped, title: `${longDay(d)}: ${d === now && !e ? "not yet" : label}` });
     }
     return out;
-  }, [h, byDay, now]);
+  }, [h, byDay, now, year]);
   const sleep = h.kind === "sleep" && entries.length ? entries.slice(0, 30) : null;
 
   const stat = (label: string, value: string | number) => (
@@ -415,7 +420,10 @@ export function HabitDetail({ habit: h, byDay, onClose, onEdit, onArchive, onDel
         {sleep ? stat("Average sleep", minutesLabel(Math.round(sleep.reduce((a, e) => a + e.value, 0) / sleep.length))) : stat("Check-ins", entries.filter((e) => isDone(h, e)).length)}
       </div>
       <section>
-        <h3 className="mb-3 text-sm uppercase tracking-wide text-ink-muted">Last 26 weeks</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm uppercase tracking-wide text-ink-muted">Consistency</h3>
+          <YearSelect year={year} years={years} onChange={onYear} className="text-sm text-ink-muted" />
+        </div>
         <HabitGrid cells={cells} />
       </section>
       <section>

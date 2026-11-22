@@ -207,7 +207,14 @@ export function TaskPlanner({ onClose, onCreated, neet = false }: { onClose: () 
 
               {/* 2. Tasks */}
               <Section n={2} title="Tasks">
-                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)} />
+                <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)}
+                  onImportPlan={(p) => {
+                    const f = p.from ?? from;
+                    if (p.from) setFrom(p.from);
+                    if (p.to) setTo(p.to); else if (to < f) setTo(f);
+                    if (p.repeat) setRepeat(p.repeat);
+                    if (p.picked) setPicked(p.picked);
+                  }} />
               </Section>
 
               {/* 3. Preview */}

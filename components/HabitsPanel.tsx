@@ -1,14 +1,16 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BedDouble, Check, ChevronDown, Flame, Minus, Moon, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
+import { BedDouble, Check, ChevronDown, FileUp, Flame, Minus, Moon, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
 import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
 import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
 import OptionWheel from "@/components/OptionWheel";
 import { ClockPopup } from "@/components/TaskDialogs";
+import { YearSelect, yearOptions } from "@/components/GlassDropdown";
 import { HabitDetail, HabitEditor, HabitGrid, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
 import { ApiError } from "@/lib/api";
+import { readHabitCsv } from "@/lib/habitCsv";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
   TEMPLATES, averageClock, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
@@ -36,12 +38,24 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   const [deleting, setDeleting] = useState<Habit | null>(null);
   const [sleepOpen, setSleepOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  /** The year the consistency grids show (All habits and each habit's own), picked in their year dropdown. */
+  const [year, setYear] = useState(() => Number(today().slice(0, 4)));
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [h, e] = await Promise.all([habitApi.list(), habitApi.entries(addDays(today(), -HISTORY_DAYS), today())]);
+      const recentFrom = addDays(today(), -HISTORY_DAYS);
+      // An earlier year than the recent history covers is read on its own and added to the check-ins.
+      const older = `${year}-01-01` < recentFrom;
+      const [h, e, y] = await Promise.all([
+        habitApi.list(),
+        habitApi.entries(recentFrom, today()),
+        older ? habitApi.entries(`${year}-01-01`, `${year}-12-31` < recentFrom ? `${year}-12-31` : addDays(recentFrom, -1)) : Promise.resolve([]),
+      ]);
       setHabits(h);
-      setIndex(indexEntries(e));
+      setIndex(indexEntries([...y, ...e]));
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError && e.status === 404
@@ -49,7 +63,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
         : e instanceof Error ? e.message : "Could not load your habits.");
       setHabits((h) => h ?? []);
     }
-  }, []);
+  }, [year]);
   useEffect(() => { void load(); }, [load, version]);
 
   /** Put one of today's entries into the local index (null = removed). */
@@ -122,6 +136,28 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
     setError(null);
     onChanged();
   }
+  /** Habits from a CSV (its own file, separate from the Tasks CSV): each row becomes a habit. */
+  async function importFile(file: File) {
+    if (importing) return;
+    if (/\.(xlsx|xls|ods|numbers)$/i.test(file.name)) {
+      setNotice("Save the sheet as CSV first (Google Sheets: File → Download → CSV; Excel: Save As → CSV).");
+      return;
+    }
+    const read = readHabitCsv(await file.text(), habits ?? []);
+    if ("error" in read) { setNotice(read.error); return; }
+    setImporting(true);
+    const failed: string[] = [];
+    const added: Habit[] = [];
+    for (const input of read.habits) {
+      try { added.push(await habitApi.create(input)); }
+      catch (e) { failed.push(`${input.name}: ${e instanceof Error ? e.message : "could not save"}`); }
+    }
+    setImporting(false);
+    if (added.length) { setHabits((hs) => [...(hs ?? []), ...added]); onChanged(); }
+    const left = [...read.skipped, ...failed];
+    setNotice(`Added ${added.length} habit${added.length === 1 ? "" : "s"} from ${file.name}.${left.length ? ` Skipped ${left.length}: ${left.join("; ")}.` : ""}`);
+  }
+
   async function archive(h: Habit) {
     try {
       const u = await habitApi.update(h.id, { archived: !h.archived });
@@ -160,17 +196,19 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
     return n;
   }, [active, index, now]);
 
-  /** All habits together, the last 26 weeks: the share of planned habits done each day. */
+  /** This year back to the year of the oldest habit (at least two years back), for the year dropdown. */
+  const years = useMemo(() => yearOptions((habits ?? []).reduce((y, h) => Math.min(y, Number(h.startDay.slice(0, 4)) || y), Number(now.slice(0, 4)))), [habits, now]);
+  /** All habits together, one calendar year: the share of planned habits done each day. */
   const overall = useMemo(() => {
     const out = [];
-    for (let i = 181; i >= 0; i--) {
-      const d = addDays(now, -i);
+    for (let d = `${year}-01-01`; d <= `${year}-12-31`; d = addDays(d, 1)) {
+      if (d > now) { out.push({ day: d, level: 0, off: true, title: `${longDay(d)}: not yet` }); continue; }
       const planned = active.filter((h) => isDue(h, d, index.get(h.id)?.get(d)));
       const done = planned.filter((h) => isDone(h, index.get(h.id)?.get(d))).length;
       out.push({ day: d, level: planned.length ? levelOf(done / planned.length) : 0, off: !planned.length, title: `${longDay(d)}: ${planned.length ? `${done} of ${planned.length} habits` : "no habits planned"}` });
     }
     return out;
-  }, [active, index, now]);
+  }, [active, index, now, year]);
 
   if (!habits) return <PanelLoader label="Loading habits" />;
 
@@ -193,6 +231,20 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
         <GlassButton type="button" strong className="max-md:hidden" onClick={() => setEditing({ preset: filter === "sleep" ? sleepPreset() : filter === "quit" ? { kind: "quit" } : filter !== "all" ? { scale: filter } : undefined })}>
           <Plus className="h-4 w-4" />New habit
         </GlassButton>
+      </div>
+
+      <div className="-mt-5 flex flex-col gap-2">
+        {/* Habits have their own CSV (Name, Type, Size, Category, Goal, Unit, Days, Time, Cue); tasks are imported in Tasks. */}
+        <button type="button" disabled={importing} onClick={() => fileRef.current?.click()} className="group inline-flex items-center gap-3 self-start text-sm text-ink outline-none disabled:opacity-60">
+          <span className="glass-fab relative grid h-10 w-10 shrink-0 place-items-center rounded-full group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent-medium">
+            <span className="pointer-events-none absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={20} blur={3} /></span>
+            <FileUp className="relative h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+          </span>
+          {importing ? "Importing…" : "Import habits CSV"}
+        </button>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,.xlsx,.xls,.ods,.numbers" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
+        {notice && <p className="text-xs text-ink-muted" role="status">{notice}</p>}
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
@@ -236,7 +288,10 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 
       {filter === "all" && active.length > 0 && (
         <Card className="pw-card">
-          <h3 className="mb-4 text-sm uppercase tracking-wide text-ink-muted">All habits, last 26 weeks</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-sm uppercase tracking-wide text-ink-muted">All habits</h3>
+            <YearSelect year={year} years={years} onChange={setYear} className="text-sm text-ink-muted" />
+          </div>
           <HabitGrid cells={overall} />
         </Card>
       )}
@@ -265,7 +320,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
         <HabitEditor habit={editing.habit} preset={editing.preset} habits={habits} onClose={() => setEditing(null)} onSave={(input) => save(input, editing.habit)} />
       )}
       {detail && !editing && !deleting && (
-        <HabitDetail habit={detail} byDay={index.get(detail.id)} onClose={() => setDetailId(null)}
+        <HabitDetail habit={detail} byDay={index.get(detail.id)} year={year} years={years} onYear={setYear} onClose={() => setDetailId(null)}
           onEdit={() => setEditing({ habit: detail })} onArchive={() => archive(detail)} onDelete={() => setDeleting(detail)} />
       )}
       {sleepOpen && sleepHabit && (
