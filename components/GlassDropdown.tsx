@@ -20,7 +20,7 @@ export interface DropdownGroup { title: string; items: DropdownItem[] }
 
 type Pos = { left: number; width: number; maxHeight: number; top?: number; bottom?: number; /** where the button is */ a: { top: number; left: number; width: number; height: number } };
 
-export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0, soft = false, ghost, backdrop = true }: {
+export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, minWidth = 0, soft = false, ghost, backdrop = true, keepOpen = false }: {
   anchor: React.RefObject<HTMLElement>; groups: DropdownGroup[]; value: string; onSelect: (id: string) => void; onClose: () => void; label: string; minWidth?: number;
   /** A pull-down menu: rounded frosted panel, full-width rows with thin separators, a tick on the chosen one. */
   soft?: boolean;
@@ -28,6 +28,8 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
   ghost?: React.ReactNode;
   /** Pull-down style: false = no dimmed, blurred screen behind (the page stays clearly visible). */
   backdrop?: boolean;
+  /** true = picking an item leaves the menu open (on / off switches); a click outside or Escape still closes it. */
+  keepOpen?: boolean;
 }) {
   const backdropOn = backdrop;
   const menu = useRef<HTMLDivElement>(null);
@@ -100,7 +102,7 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
             {g.items.map((it, ii) => {
               const on = it.id === value;
               if (soft) return (
-                <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); onClose(); anchor.current?.focus(); }}
+                <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); if (!keepOpen) { onClose(); anchor.current?.focus(); } }}
                   className={cn("flex w-full items-center gap-2.5 px-4 py-[11px] text-left text-[16px] outline-none transition-colors active:bg-overlay/[0.08] focus-visible:bg-overlay/[0.07]", ii < g.items.length - 1 && "border-b border-overlay/10", it.danger ? "text-[#F2453D]" : "text-ink")}>
                   {/* action items (with an icon, shown on the right) need no tick column */}
                   {!it.icon && <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} strokeWidth={2.5} aria-hidden />}
@@ -110,7 +112,7 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
                 </button>
               );
               return (
-                <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); onClose(); anchor.current?.focus(); }}
+                <button key={it.id || "none"} type="button" role="option" aria-selected={on} onClick={() => { onSelect(it.id); if (!keepOpen) { onClose(); anchor.current?.focus(); } }}
                   className={cn("flex w-full items-center gap-3 px-4 py-2 text-left text-sm normal-case tracking-normal outline-none transition-colors focus-visible:bg-overlay/[0.07]", on ? "bg-ink text-canvas" : it.danger ? "text-accent-extreme" : "text-ink")}>
                   {it.icon ? <it.icon className={cn("h-4 w-4 shrink-0", !on && !it.danger && "text-ink-muted")} strokeWidth={1.75} aria-hidden />
                     : <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} strokeWidth={2.25} aria-hidden />}
@@ -129,8 +131,10 @@ export function DropdownMenu({ anchor, groups, value, onSelect, onClose, label, 
 }
 
 /** A wide liquid glass button showing the chosen value, with the menu exactly as wide as the button. */
-export function GlassDropdown({ value, display, groups, onSelect, label, className, soft = false }: {
+export function GlassDropdown({ value, display, groups, onSelect, label, className, soft = false, keepOpen = false }: {
   value: string; display: string; groups: DropdownGroup[]; onSelect: (id: string) => void; label: string; className?: string;
+  /** Picking an item leaves the menu open. */
+  keepOpen?: boolean;
   /** Pull-down look: a pill button and a pull-down menu (phones' To do filter). */
   soft?: boolean;
 }) {
@@ -143,7 +147,7 @@ export function GlassDropdown({ value, display, groups, onSelect, label, classNa
         <span className="truncate">{display}</span>
         <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/85 transition-transform duration-200", open && "rotate-180")} strokeWidth={2.25} aria-hidden />
       </button>
-      {open && <DropdownMenu soft anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} minWidth={240}
+      {open && <DropdownMenu soft keepOpen={keepOpen} anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} minWidth={240}
         ghost={<span className="flex h-full w-full items-center justify-between gap-2 rounded-full bg-[#3478F6] px-4 text-[15px] font-medium text-white"><span className="truncate">{display}</span><ChevronDown className="h-4 w-4 shrink-0 rotate-180 text-white/85" strokeWidth={2.25} /></span>} />}
     </>
   );
@@ -155,7 +159,7 @@ export function GlassDropdown({ value, display, groups, onSelect, label, classNa
         <span className="relative truncate">{display}</span>
         <ChevronDown className={cn("relative h-4 w-4 shrink-0 text-ink-muted transition-transform duration-200", open && "rotate-180")} aria-hidden />
       </button>
-      {open && <DropdownMenu anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} />}
+      {open && <DropdownMenu keepOpen={keepOpen} anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} />}
     </>
   );
 }

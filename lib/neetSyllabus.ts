@@ -123,3 +123,12 @@ const NEET_NAMES = new Set(["ankitsahni", "sushmakumar", "janhvisahni"]);
 const nameKey = (name: string) => name.toLowerCase().replace(/[^a-z]/g, "").replace(/sahani/g, "sahni");
 export const isNeetAspirant = (user: { name: string; username: string }) =>
   NEET_USERNAMES.has(user.username.toLowerCase()) || NEET_NAMES.has(nameKey(user.name));
+
+/**
+ * Coding contests (LeetCode, Codeforces, …) are only for the software engineers (CSE): Harsh Narayan Nishad, Dinesh
+ * Kushwaha and Prasoon Priya Rawat. Matched by username or by name (ignoring case and spaces); the backend checks the same.
+ */
+const CSE_USERNAMES = new Set(["harsh.nishad", "harshnarayannishad", "dinesh.kushwaha", "prasoon.rawat"]);
+const CSE_NAMES = new Set(["harshnarayannishad", "dineshkushwaha", "prasoonpriyarawat", "prasoon"]);
+export const isSoftwareEngineer = (user: { name: string; username: string }) =>
+  CSE_USERNAMES.has((user.username ?? "").toLowerCase()) || CSE_NAMES.has((user.name ?? "").toLowerCase().replace(/[^a-z]/g, ""));

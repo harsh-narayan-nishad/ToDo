@@ -1,4 +1,5 @@
 import { API_BASE, fallBackToOnline, whenBackendChosen } from "@/lib/backend";
+import { cacheAfterWrite, cacheClear, cacheGet, cacheKey, cachePut, cacheable } from "@/lib/cache";
 /** Backend address INCLUDING /api/v1: the local backend when it runs, otherwise the online one (see lib/backend.ts). */
 export { API_BASE };
 /** The main Pacewise app, for "Open calendar" and "Create an account". */
@@ -37,7 +38,7 @@ function refreshSession(): Promise<boolean> {
   if (!s) return Promise.resolve(false);
   refreshing ??= fetch(url("/auth/refresh"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: s.refreshToken }) })
     .then(async (r) => {
-      if (!r.ok) { session.clear(); return false; }
+      if (!r.ok) { session.clear(); cacheClear(); return false; }
       const j = (await r.json()) as Session;
       session.set({ accessToken: j.accessToken, refreshToken: j.refreshToken });
       return true;
@@ -47,7 +48,30 @@ function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
-export async function api<T>(path: string, opts: Options = {}, retried = false): Promise<T> {
+/**
+ * A request to the backend. Reads of the day's data come from this device's cache while it is fresh (see lib/cache.ts),
+ * so opening tabs or coming back to the app sends nothing; saves go to the server at once and update the cache.
+ */
+const inflight = new Map<string, Promise<unknown>>();
+export async function api<T>(path: string, opts: Options = {}): Promise<T> {
+  const method = opts.method ?? "GET";
+  if (method === "GET" && !opts.noAuth && cacheable(path)) {
+    const key = cacheKey(path, opts.query);
+    const hit = cacheGet<T>(key);
+    if (hit !== undefined) return hit;
+    // The same read asked for twice at once (two panels) goes out once.
+    const running = inflight.get(key) as Promise<T> | undefined;
+    if (running) return running;
+    const p = request<T>(path, opts).then((data) => { cachePut(key, data); return data; }).finally(() => inflight.delete(key));
+    inflight.set(key, p);
+    return p;
+  }
+  const data = await request<T>(path, opts);
+  if (method !== "GET" && !opts.noAuth) cacheAfterWrite(method, path, opts.body, data);
+  return data;
+}
+
+async function request<T>(path: string, opts: Options = {}, retried = false): Promise<T> {
   if (!API_BASE) throw new ApiError(0, "NEXT_PUBLIC_API_URL is not set. Copy .env.local.example to .env.local and restart.", "API_DISABLED");
   await whenBackendChosen();
   const headers: Record<string, string> = {};
@@ -59,11 +83,11 @@ export async function api<T>(path: string, opts: Options = {}, retried = false):
     res = await fetch(url(path, opts.query), { method: opts.method ?? "GET", headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body) });
   } catch {
     // The local backend was stopped while this page was open: carry on with the online one.
-    if (fallBackToOnline()) return api<T>(path, opts, retried);
+    if (fallBackToOnline()) return request<T>(path, opts, retried);
     // A CORS refusal looks exactly like this in the browser, so name both causes.
     throw new ApiError(0, `Cannot reach the backend at ${API_BASE}. Check that it is running and that its CORS_ORIGINS includes ${typeof window === "undefined" ? "this app" : window.location.origin}.`, "NETWORK");
   }
-  if (res.status === 401 && !opts.noAuth && !retried && (await refreshSession())) return api<T>(path, opts, true);
+  if (res.status === 401 && !opts.noAuth && !retried && (await refreshSession())) return request<T>(path, opts, true);
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as { message?: string; error?: { message?: string; code?: string }; code?: string };
   if (!res.ok) throw new ApiError(res.status, data.error?.message ?? data.message ?? `Request failed (${res.status})`, data.error?.code ?? data.code);
@@ -79,6 +103,7 @@ function keep(r: LoginResult): User {
     throw new ApiError(403, r.approvalRequired ? "Your account is waiting for approval." : "Please confirm your e-mail in Pacewise first.", "NOT_READY");
   }
   session.set({ accessToken: r.accessToken, refreshToken: r.refreshToken });
+  cacheClear(); // a new sign-in never sees an earlier account's data
   return r.user;
 }
 
@@ -93,5 +118,6 @@ export async function googleLogin(idToken: string): Promise<User> {
 export async function logout(): Promise<void> {
   const s = session.get();
   session.clear();
+  cacheClear();
   if (s && API_BASE) await fetch(url("/auth/logout"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: s.refreshToken }) }).catch(() => undefined);
 }

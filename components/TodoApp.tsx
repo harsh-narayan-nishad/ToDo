@@ -19,7 +19,7 @@ import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
 import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
-import { isNeetAspirant } from "@/lib/neetSyllabus";
+import { isNeetAspirant, isSoftwareEngineer } from "@/lib/neetSyllabus";
 
 type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
@@ -316,7 +316,7 @@ export function TodoApp() {
           )}
           <h1 className="font-display text-3xl">{tab === "history" ? "History" : tab === "docs" ? "Tour" : TABS.find((t) => t.id === tab)?.label}.</h1>
         </div>
-        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} onDueNow={setDueNow} onOpenCalendar={() => setTab("calendar")} />}
+        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} cse={isSoftwareEngineer(user)} onDueNow={setDueNow} onOpenCalendar={() => setTab("calendar")} />}
         {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
         {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
         {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}

@@ -2,6 +2,10 @@ import { api, ApiError } from "@/lib/api";
 import { today, tzOffset } from "@/lib/days";
 
 export type Priority = "low" | "medium" | "high";
+export type ContestPlatform = "leetcode" | "codeforces" | "atcoder" | "codechef" | "gfg";
+export const CONTEST_PLATFORMS: { id: ContestPlatform; label: string }[] = [
+  { id: "leetcode", label: "LeetCode" }, { id: "codeforces", label: "Codeforces" }, { id: "atcoder", label: "AtCoder" }, { id: "codechef", label: "CodeChef" }, { id: "gfg", label: "GeeksforGeeks" },
+];
 
 export interface Task {
   id: string;
@@ -63,6 +67,10 @@ export const todoApi = {
   logs: (from?: string, to?: string) => api<WorkLog[]>("/todo/logs", { query: { from, to } }),
   removeLog: (id: string) => api<void>(`/todo/logs/${encodeURIComponent(id)}`, { method: "DELETE", query: { today: today() } }),
   summary: () => api<Summary>("/todo/summary", { query: { today: today() } }),
+  /** Coding contests as tasks: which platforms are on (opening also adds any new contests), and switching one on / off. */
+  contests: () => api<{ platforms: ContestPlatform[]; added: number }>("/todo/contests", { query: { tzOffset: String(tzOffset()) } }),
+  setContests: (platform: ContestPlatform, enabled: boolean) =>
+    api<{ platforms: ContestPlatform[]; added: number; removed: number }>("/todo/contests", { method: "POST", body: { platform, enabled, tzOffset: tzOffset() } }),
   day: (day: string) => api<DayDetail>(`/todo/days/${day}`),
   /** My entries; a backend from before entries has no /todo/entries (404): then there are none. */
   entries: () => api<Entry[]>("/todo/entries").catch((e) => { if (e instanceof ApiError && e.status === 404) return [] as Entry[]; throw e; }),

@@ -14,7 +14,7 @@ import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/da
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
 import { taskCounts } from "@/components/CountCards";
 import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
-import { todoApi, type Priority, type Task } from "@/lib/todo";
+import { CONTEST_PLATFORMS, todoApi, type ContestPlatform, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 
 type Filter = "open" | "done" | "all";
@@ -23,7 +23,7 @@ const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 /** `neet` = the signed-in user is preparing for NEET: task titles then also search the NEET syllabus and NCERT chapters. */
-export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false, onDueNow, onOpenCalendar }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean; onDueNow?: (n: number) => void; onOpenCalendar?: () => void }) {
+export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false, cse = false, onDueNow, onOpenCalendar }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean; /** A software engineer (CSE): the Contests menu is shown. */ cse?: boolean; onDueNow?: (n: number) => void; onOpenCalendar?: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
@@ -49,6 +49,30 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
     try { setTasks(await todoApi.tasks()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
+
+  /** Coding contests: every upcoming contest of each platform switched on is a task (and so in the calendar too). */
+  const [contests, setContests] = useState<ContestPlatform[] | null>(null);
+  const [contestBusy, setContestBusy] = useState(false);
+  useEffect(() => {
+    if (!cse) { setContests(null); return; }
+    void todoApi.contests().then((r) => { setContests(r.platforms); if (r.added > 0) { void load(); onChanged(); } }, () => undefined);
+  }, [load, onChanged, cse]);
+  async function toggleContest(p: ContestPlatform) {
+    if (contestBusy || contests === null) return;
+    setContestBusy(true);
+    try {
+      const r = await todoApi.setContests(p, !contests.includes(p));
+      setContests(r.platforms);
+      if (r.added > 0 || r.removed > 0) { await load(); onChanged(); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not update contests."); }
+    finally { setContestBusy(false); }
+  }
+  const contestToggle = cse && contests !== null && (
+    <GlassDropdown soft keepOpen label="Contests" className="w-40" value=""
+      display={contestBusy ? "Contests…" : contests.length ? `Contests · ${contests.length}` : "Contests"}
+      groups={[{ title: "Add contests as tasks", items: CONTEST_PLATFORMS.map((p) => ({ id: p.id, label: p.label, meta: contests.includes(p.id) ? "On" : "Off" })) }]}
+      onSelect={(id) => void toggleContest(id as ContestPlatform)} />
+  );
   // The tour's practice task lives on this screen only: when the tour ends, it goes.
   useEffect(() => {
     const drop = () => setTasks((list) => (list ? list.filter((t) => !t.id.startsWith("tour-")) : list));
@@ -156,12 +180,14 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
             ...(tasks ? [{ title: "", items: [{ id: "overview", label: "Overview" }] }] : []),
           ]}
           onSelect={(id) => (id === "overview" ? setOverview(true) : setFilter(id as Filter))} />
+        {contestToggle}
       </div>
       <div className="hidden flex-wrap items-center gap-2 md:flex">
         {(["open", "done", "all"] as Filter[]).map((f) => (
           <Button key={f} size="sm" variant={filter === f ? "primary" : "outline"} onClick={() => setFilter(f)}>{f === "open" ? "To do" : f === "done" ? "Done" : "All"}</Button>
         ))}
         {tasks && <Button size="sm" variant="outline" onClick={() => setOverview(true)}><BarChart3 className="h-4 w-4" />Overview</Button>}
+        {contestToggle}
       </div>
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
