@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ArrowLeft, CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
@@ -126,6 +127,119 @@ export function TodoApp() {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
+  /**
+   * Phones: swipe left / right on the page to go to the next / previous tab of the bottom bar, the way iOS pages move:
+   * the page follows the finger once the swipe is clearly sideways (vertical scrolling is left alone), it resists at
+   * the first and last tab, and on release it either springs back or slides out while the next tab slides in. A quick
+   * flick is enough; a slow drag has to pass a third of the screen. A swipe that starts in something that scrolls
+   * sideways (a grid, the task sheet) or in a field stays there. Native listeners on <main>, so swipes inside pop-ups
+   * and sheets (portals) never switch tabs. The page moves with `left` (not a transform), so fixed buttons stay put.
+   */
+  const mainRef = useRef<HTMLElement>(null);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!phone || !el) return;
+    const order: Tab[] = ["tasks", "habits", "calendar", "profile"];
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const EASE = "cubic-bezier(0.25, 1, 0.5, 1)";
+    let g: { x: number; y: number; lock: "x" | "y" | null; dx: number; vx: number; lastX: number; lastT: number } | null = null;
+    let animating = false;
+
+    const scrollsSideways = (n: EventTarget | null) => {
+      for (let e = n instanceof Element ? n : null; e && e !== el; e = e.parentElement) {
+        if (e.matches("input, textarea, select, [contenteditable=true], [role=slider]")) return true;
+        const ox = getComputedStyle(e).overflowX;
+        if ((ox === "auto" || ox === "scroll") && e.scrollWidth > e.clientWidth + 1) return true;
+      }
+      return false;
+    };
+    const place = (x: number, ms = 0, ease = EASE) => {
+      el.style.transition = ms ? `left ${ms}ms ${ease}, opacity ${ms}ms ${ease}` : "none";
+      el.style.position = "relative";
+      el.style.left = `${x}px`;
+    };
+    const clear = () => { el.style.transition = ""; el.style.left = ""; el.style.position = ""; el.style.opacity = ""; document.documentElement.style.overflowX = ""; };
+    const after = (ms: number, fn: () => void) => window.setTimeout(fn, ms);
+    /** iOS-style rubber band past the first / last tab. */
+    const rubber = (x: number, w: number) => Math.sign(x) * (1 - 1 / ((Math.abs(x) * 0.55) / w + 1)) * w;
+
+    const down = (e: TouchEvent) => {
+      if (animating || e.touches.length !== 1 || scrollsSideways(e.target)) { g = null; return; }
+      if (!order.includes(tabRef.current)) { g = null; return; }
+      const x = e.touches[0].clientX;
+      g = { x, y: e.touches[0].clientY, lock: null, dx: 0, vx: 0, lastX: x, lastT: performance.now() };
+    };
+    const move = (e: TouchEvent) => {
+      if (!g || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - g.x;
+      const dy = t.clientY - g.y;
+      if (!g.lock) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        g.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+        if (g.lock === "x") document.documentElement.style.overflowX = "hidden";
+      }
+      if (g.lock !== "x") return;
+      e.preventDefault(); // the page moves sideways, so it must not scroll up / down at the same time
+      const now = performance.now();
+      const dt = Math.max(1, now - g.lastT);
+      g.vx = 0.8 * ((t.clientX - g.lastX) / dt) + 0.2 * g.vx;
+      g.lastX = t.clientX;
+      g.lastT = now;
+      g.dx = dx;
+      const i = order.indexOf(tabRef.current);
+      const edge = (dx > 0 && i === 0) || (dx < 0 && i === order.length - 1);
+      if (!reduced) place(edge ? rubber(dx, el.clientWidth) : dx);
+    };
+    const up = () => {
+      const s = g;
+      g = null;
+      if (!s || s.lock !== "x") return;
+      const w = el.clientWidth;
+      const i = order.indexOf(tabRef.current);
+      const dir = s.dx < 0 ? 1 : -1;
+      const next = order[i + dir];
+      const flick = Math.abs(s.vx) > 0.35 && Math.sign(s.vx) === Math.sign(s.dx);
+      const go = !!next && (Math.abs(s.dx) > w / 3 || flick);
+      if (!go) {
+        if (reduced) { clear(); return; }
+        animating = true;
+        place(0, 380, "cubic-bezier(0.34, 1.3, 0.64, 1)"); // a soft spring back
+        after(390, () => { clear(); animating = false; });
+        return;
+      }
+      if (reduced) { clear(); setTab(next); return; }
+      animating = true;
+      // Out the way it was going, at about the finger's speed; the next tab comes in from the other side.
+      const out = Math.min(260, Math.max(140, (w - Math.abs(s.dx)) / Math.max(0.8, Math.abs(s.vx))));
+      el.style.opacity = "0.6";
+      place(-dir * w, out);
+      after(out, () => {
+        flushSync(() => setTab(next));
+        el.style.opacity = "0.6";
+        place(dir * w * 0.35);
+        void el.offsetWidth; // start the slide-in from there
+        el.style.opacity = "1";
+        place(0, 320);
+        after(330, () => { clear(); animating = false; });
+      });
+    };
+    const cancel = () => {
+      if (g?.lock === "x" && !reduced) { animating = true; place(0, 300); after(310, () => { clear(); animating = false; }); }
+      g = null;
+    };
+    el.addEventListener("touchstart", down, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", up, { passive: true });
+    el.addEventListener("touchcancel", cancel, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", down); el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", up); el.removeEventListener("touchcancel", cancel);
+      clear();
+    };
+  }, [phone, user, checking]);
   /** The guided tour (More → Take the tour). */
   const [touring, setTouring] = useState(false);
   /** Open tasks due now (today + overdue), for the phone greeting; null until the task list has loaded. */
@@ -192,7 +306,7 @@ export function TodoApp() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
+      <main ref={mainRef} className="min-w-0 flex-1">
         <div className={cn("mb-6 flex items-center gap-3", tab === "tasks" && "hidden md:flex")}>
           {tab !== "tasks" && (
             <button type="button" onClick={goBack} aria-label="Back" title="Back"
