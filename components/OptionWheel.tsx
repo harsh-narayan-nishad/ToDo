@@ -143,6 +143,11 @@ const OptionWheel = ({
     // neighbors equal to one row height, so tilt controls how tightly it curls.
     const tiltRad = (cfg.tilt * Math.PI) / 180;
     const R = tiltRad > 0.0005 ? cfg.rowH / tiltRad : 0;
+    // Only the rows near the middle can be seen (they fade out, and curl away past a quarter turn): the rest are hidden
+    // once and then skipped, so a long list (a 16-hour wheel has ~200 rows) costs the same per frame as a short one.
+    const fadeRows = cfg.fade > 0 && cfg.minOpacity <= 0 ? 1 / cfg.fade : Infinity;
+    const curlRows = tiltRad > 0.0005 ? Math.PI / 2 / tiltRad : Infinity;
+    const reach = Math.min(fadeRows, curlRows, 12) + 1;
     for (let i = 0; i < n; i++) {
       const el = els[i];
       if (!el) continue;
@@ -152,6 +157,11 @@ const OptionWheel = ({
         if (d > n / 2) d -= n;
       }
       const dist = Math.abs(d);
+      if (dist > reach) {
+        if (el.style.visibility !== 'hidden') el.style.visibility = 'hidden';
+        continue;
+      }
+      if (el.style.visibility === 'hidden') el.style.visibility = '';
       let x = 0;
       let y = d * cfg.rowH;
       let rot = 0;
@@ -163,7 +173,8 @@ const OptionWheel = ({
       }
       el.style.transform = `translate(${x.toFixed(2)}px, calc(${y.toFixed(2)}px - 50%)) rotate(${rot.toFixed(3)}deg)`;
       el.style.opacity = String(Math.max(cfg.minOpacity, 1 - dist * cfg.fade));
-      el.style.filter = cfg.blur > 0 ? `blur(${(dist * cfg.blur).toFixed(2)}px)` : 'none';
+      // No filter at all on the middle row (a 0px blur still costs a filter pass).
+      el.style.filter = cfg.blur > 0 && dist * cfg.blur >= 0.05 ? `blur(${(dist * cfg.blur).toFixed(1)}px)` : 'none';
       el.style.setProperty('--ow-p', Math.max(0, 1 - Math.min(dist, 1)).toFixed(4));
     }
 

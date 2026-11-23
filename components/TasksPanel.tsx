@@ -6,7 +6,7 @@ import { TaskHabits } from "@/components/TaskHabits";
 import { TaskOverview } from "@/components/TaskOverview";
 import { weekday } from "@/lib/repeat";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { BarChart3, CalendarDays, Check, Clock, Lock, MoreHorizontal, NotebookPen, Pencil, Plus, Timer, Trash2 } from "lucide-react";
+import { BarChart3, CalendarDays, Check, Clock, Eye, Lock, MoreHorizontal, NotebookPen, Pencil, Plus, Timer, Trash2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, Pager } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, NotesPopup, SpentWheel } from "@/components/TaskDialogs";
 import { lateFinishAllowed, lockedProblem } from "@/lib/rules";
@@ -30,7 +30,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   const [editing, setEditing] = useState<Task | null>(null);
   const [logging, setLogging] = useState<Task | null>(null);
   /** Notes open for this task (the same popup as the option wheel). */
-  const [notesFor, setNotesFor] = useState<Task | null>(null);
+  const [notesFor, setNotesFor] = useState<{ task: Task; view: boolean } | null>(null);
   /** Time spent today on the option wheel: the task and what is logged today so far. */
   const [spentFor, setSpentFor] = useState<{ task: Task; today: number } | null>(null);
   async function openSpent(t: Task) {
@@ -227,7 +227,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
             {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
               <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
-                onNotes={() => setNotesFor(t)} onSpent={() => void openSpent(t)} />
+                onNotes={() => setNotesFor({ task: t, view: false })} onViewNotes={() => setNotesFor({ task: t, view: true })} onSpent={() => void openSpent(t)} />
             ))}
           </ul>
           {g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.key, g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={(n) => setPages((cur) => ({ ...cur, [g.key]: n }))} /></div>}
@@ -242,8 +242,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       {planning && <TaskPlanner neet={neet} contests={contestToggle || undefined} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
 
       {notesFor && (
-        <NotesPopup title={`Notes · ${notesFor.title}`} value={notesFor.notes ?? ""} onClose={() => setNotesFor(null)}
-          onSave={async (notes) => { replace(await todoApi.update(notesFor.id, { notes })); onChanged(); }} />
+        <NotesPopup title={`${notesFor.view ? "Notes" : "Add note"} · ${notesFor.task.title}`} value={notesFor.task.notes ?? ""} readOnly={notesFor.view} onClose={() => setNotesFor(null)}
+          onSave={async (notes) => { replace(await todoApi.update(notesFor.task.id, { notes })); onChanged(); }} />
       )}
       {spentFor && (
         <SpentWheel title={spentFor.task.title} value={spentFor.today} planned={planned(spentFor.task)} onClose={() => setSpentFor(null)}
@@ -271,7 +271,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   );
 }
 
-function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDelete, onNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onSpent: () => void }) {
+function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void }) {
   const done = t.status === "done" || celebrating;
   /** Past days are read-only: no ticking, logging, editing or deleting. */
   const locked = lockedProblem(t, today());
@@ -287,21 +287,22 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
           {done && <Check className={cn("h-3.5 w-3.5", celebrating && "check-pop")} strokeWidth={3} />}
         </button>
         <div className="min-w-0 flex-1 pt-2">
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-muted">
+          {/* The day, time and length on top: tap to set the time spent on the option wheel. */}
+          <button type="button" onClick={onSpent} disabled={!!locked} aria-label={`${rangeLabel(t.startDay, t.dueDay)}${t.startTime ? `, ${clock(t.startTime)}` : ""}. Set the time spent`} title={locked ? undefined : "Set the time spent"}
+            className="-mx-1.5 -my-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-1.5 py-0.5 text-left text-[13px] text-ink-muted transition-colors active:bg-overlay/[0.08] disabled:active:bg-transparent">
             <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{rangeLabel(t.startDay, t.dueDay)}</span>
             {t.startTime && <span className="flex items-center gap-1"><Timer className="h-3.5 w-3.5" aria-hidden />{clock(t.startTime)}{planned(t) ? ` · ${duration(planned(t)!)}` : ""}</span>}
-          </p>
+          </button>
           <p className={cn("mt-1 break-words text-[17px] leading-snug", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</p>
           {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
             <Badge tone={PRIORITY_TONE[t.priority]} className="rounded-full">{t.priority}</Badge>
-            {locked ? (t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>
-              : <SpentChip task={t} onClick={onSpent} />}
+            {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
             {done && t.completedDay && <span>finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
             {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
           </div>
         </div>
-        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} />}
+        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} onViewNotes={t.notes?.trim() ? onViewNotes : undefined} />}
       </div>
 
       <div className="hidden items-start gap-4 px-4 py-4 sm:px-5 md:flex">
@@ -314,33 +315,22 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
         {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
           <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
-          <span>{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</span>
-          {locked ? (t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>
-            : <SpentChip task={t} onClick={onSpent} />}
+          {locked ? <span>{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</span>
+            : <button type="button" onClick={onSpent} title="Set the time spent" className="rounded px-1 -mx-1 underline-offset-2 transition-colors hover:text-ink-muted hover:underline">{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</button>}
+          {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
           {done && t.completedDay && <span>· finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
           {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
         </div>
       </div>
       {!locked && <div className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
-        <Button size="sm" variant="ghost" onClick={onNotes} aria-label="Notes" title="Notes"><NotebookPen className="h-4 w-4" /></Button>
+        <Button size="sm" variant="ghost" onClick={onNotes} aria-label="Add note" title="Add note"><NotebookPen className="h-4 w-4" /></Button>
+        {t.notes?.trim() && <Button size="sm" variant="ghost" onClick={onViewNotes} aria-label="View notes" title="View notes"><Eye className="h-4 w-4" /></Button>}
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>
       </div>}
       </div>
     </li>
-  );
-}
-
-/** Time spent on a task (and its plan): tap to set today's time on the option wheel. */
-function SpentChip({ task: t, onClick }: { task: Task; onClick: () => void }) {
-  const spent = t.loggedMinutes ?? 0;
-  const plan = planned(t);
-  return (
-    <button type="button" onClick={onClick} aria-label={`Time spent: ${duration(spent)}${plan ? ` of ${duration(plan)} planned` : ""}. Set on the wheel`} title="Set the time spent"
-      className={cn("inline-flex items-center gap-1 rounded-full bg-overlay/[0.06] px-2 py-0.5 tabular-nums transition-colors active:bg-overlay/[0.12]", spent > 0 ? "text-ink-muted" : "text-ink-faint")}>
-      <Clock className="h-3 w-3" aria-hidden />{spent > 0 ? duration(spent) : "0 min"}{plan ? ` / ${duration(plan)}` : ""}
-    </button>
   );
 }
 
@@ -394,8 +384,8 @@ function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: Cale
   );
 }
 
-/** Phones: the ⋯ on a task card, with Notes, Log time, Edit and Delete. */
-function MoreMenu({ onLog, onEdit, onDelete, onNotes }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void }) {
+/** Phones: the ⋯ on a task card, with Add note (and View notes when there are some), Log time, Edit and Delete. */
+function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void; onViewNotes?: () => void }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -407,8 +397,8 @@ function MoreMenu({ onLog, onEdit, onDelete, onNotes }: { onLog: () => void; onE
       {open && (
         <DropdownMenu soft anchor={trigger} label="Task actions" value="" minWidth={200}
           ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
-          groups={[{ title: "", items: [{ id: "notes", label: "Notes", icon: NotebookPen }, { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
-          onSelect={(id) => (id === "notes" ? onNotes() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
+          groups={[{ title: "", items: [{ id: "notes", label: "Add note", icon: NotebookPen }, ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []), { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
+          onSelect={(id) => (id === "notes" ? onNotes() : id === "view" ? onViewNotes?.() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}
     </>
   );

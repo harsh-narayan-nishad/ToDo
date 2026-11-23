@@ -9,7 +9,6 @@ import { earliestStart, loggableDays, logProblem, nowLocal, planProblem, titlePr
 import { todoApi, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 import LiquidGlass from "@/components/LiquidGlass";
-import { GlassButton } from "@/components/GlassButton";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import OptionWheel from "@/components/OptionWheel";
 
@@ -229,21 +228,30 @@ function Knob({ x, y, size, strong }: { x: number; y: number; size: number; stro
 }
 
 /** The clock as a popup of liquid glass above everything (also above the New task panel and the planner). Escape, a click outside or Done closes only the popup. */
-export function ClockPopup({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function ClockPopup({ title, onClose, children, busy = false }: { title: string; onClose: () => void; children: React.ReactNode;
+  /** Saving: Done shows the loader and the popup stays open until it is saved. */
+  busy?: boolean;
+}) {
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); onClose(); } };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); if (!busy) onClose(); } };
     window.addEventListener("keydown", esc, true); // first, so the panel underneath stays open
     return () => window.removeEventListener("keydown", esc, true);
-  }, [onClose]);
+  }, [onClose, busy]);
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-canvas/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}
-      onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}>
-      <div className="glass-in relative w-full max-w-sm">
-        <span className="absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={28} blur={4} /></span>
+    // Smooth on every device: a plain dim and a solid Apple-style panel (no backdrop blur or glass lens to compute while
+    // it opens and while the wheel spins inside it); only transform and opacity animate, on the GPU.
+    <div className="notif-dim fade-in fixed inset-0 z-[150] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}
+      onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="pw-notif glass-in relative w-full max-w-sm rounded-[28px] shadow-themed [backface-visibility:hidden] [will-change:transform,opacity]">
         <div className="relative flex flex-col gap-4 p-5 sm:p-6">
           <h3 className="font-display text-xl">{title}</h3>
           {children}
-          <div className="flex justify-end"><GlassButton type="button" strong onClick={onClose}>Done</GlassButton></div>
+          <div className="flex justify-end">
+            <button type="button" onClick={onClose} disabled={busy} aria-busy={busy}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#3478F6] px-7 text-[15px] font-semibold text-white transition-[transform,opacity] active:scale-[0.97] disabled:opacity-80">
+              {busy && <ButtonWheel />}{busy ? "Saving…" : "Done"}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
@@ -435,8 +443,10 @@ function WorkWheel({ value, onChange, onClose }: { value: number; onChange: (m: 
  * Your own notes on a task or habit (how to beat it, what works), in the same popup as the option wheel.
  * Read them, type to change them; they are saved when the popup closes (Done, a tap outside, or Esc).
  */
-export function NotesPopup({ title, value, placeholder, onSave, onClose }: {
+export function NotesPopup({ title, value, placeholder, onSave, onClose, readOnly = false }: {
   title: string; value: string; placeholder?: string; onSave: (notes: string) => Promise<void>; onClose: () => void;
+  /** View notes: shown to read, not to edit. */
+  readOnly?: boolean;
 }) {
   const [text, setText] = useState(value);
   const [busy, setBusy] = useState(false);
@@ -448,12 +458,17 @@ export function NotesPopup({ title, value, placeholder, onSave, onClose }: {
     setError(null);
     try { await onSave(text.trim()); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Could not save the notes."); setBusy(false); }
   };
+  if (readOnly) return (
+    <ClockPopup title={title} onClose={onClose}>
+      <div className="max-h-[50dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-overlay/[0.04] px-4 py-3 text-[15px] leading-relaxed text-ink">{value}</div>
+    </ClockPopup>
+  );
   return (
-    <ClockPopup title={title} onClose={() => void close()}>
+    <ClockPopup title={title} onClose={() => void close()} busy={busy}>
       <p className="-mt-2 text-sm text-ink-muted">Your notes: how to beat it, what works, what to remember. Saved when you close this.</p>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} maxLength={2000} placeholder={placeholder ?? "e.g. Start with the easiest part. Phone in another room."} autoFocus
-        className="w-full resize-none rounded-2xl border border-overlay/10 bg-overlay/[0.04] px-4 py-3 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-overlay/25" />
-      <p className="-mt-2 text-right text-xs tabular-nums text-ink-faint">{busy ? "Saving…" : `${text.length} / 2000`}</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} disabled={busy} rows={8} maxLength={2000} placeholder={placeholder ?? "e.g. Start with the easiest part. Phone in another room."} autoFocus
+        className="w-full resize-none rounded-2xl border border-overlay/10 bg-overlay/[0.04] px-4 py-3 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-overlay/25 disabled:opacity-60" />
+      <p className="-mt-2 text-right text-xs tabular-nums text-ink-faint">{text.length} / 2000</p>
       {error && <p className="-mt-2 text-sm text-accent-extreme" role="alert">{error}</p>}
     </ClockPopup>
   );
@@ -486,11 +501,11 @@ export function SpentWheel({ title, value, planned, onSave, onClose }: {
     try { await onSave(picked); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Could not save the time."); setBusy(false); }
   };
   return (
-    <ClockPopup title={title} onClose={() => void close()}>
+    <ClockPopup title={title} onClose={() => void close()} busy={busy}>
       <p className="-mt-2 text-sm text-ink-muted">
         Time spent today{planned ? ` · planned ${duration(planned)}` : ""}. Scroll or drag to set it; tick the task to finish it.
       </p>
-      <div className="relative h-64">
+      <div className={cn("relative h-64 transition-opacity", busy && "pointer-events-none opacity-60")}>
         <span className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 border-y border-overlay/15 bg-overlay/[0.04]" aria-hidden />
         <OptionWheel
           items={values.map((v) => (v === 0 ? "0 min" : duration(v)))}
@@ -511,7 +526,7 @@ export function SpentWheel({ title, value, planned, onSave, onClose }: {
           onChange={(i) => { moved.current = true; setPicked(values[i]); }}
         />
       </div>
-      {(busy || error) && <p className={cn("text-sm", error ? "text-accent-extreme" : "text-ink-muted")} role={error ? "alert" : undefined}>{error ?? "Saving…"}</p>}
+      {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
     </ClockPopup>
   );
 }

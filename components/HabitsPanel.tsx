@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BedDouble, Check, ChevronDown, FileUp, Flame, Minus, Moon, MoreHorizontal, NotebookPen, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
+import { BedDouble, Check, ChevronDown, Eye, FileUp, Flame, Minus, Moon, MoreHorizontal, NotebookPen, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
 import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -403,7 +403,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const amount = h.kind === "count" || h.kind === "duration";
   const step = h.kind === "duration" ? (h.target >= 60 ? 15 : 5) : Math.max(1, Math.round(goal(h) / 10));
   const [wheel, setWheel] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState<"add" | "view" | null>(null);
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
@@ -456,10 +456,10 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
               <Undo2 className="h-4 w-4" />
             </GlassRound>
           )}
-          {(onDelete || onNotes) && <HabitMenu name={h.name} onNotes={onNotes ? () => setNotesOpen(true) : undefined} onDelete={onDelete} />}
+          {(onDelete || onNotes) && <HabitMenu name={h.name} onNotes={onNotes ? () => setNotesOpen("add") : undefined} onViewNotes={onNotes && h.notes?.trim() ? () => setNotesOpen("view") : undefined} onDelete={onDelete} />}
         </div>
       )}
-      {notesOpen && onNotes && <NotesPopup title={`Notes · ${h.name}`} value={h.notes ?? ""} onSave={onNotes} onClose={() => setNotesOpen(false)} />}
+      {notesOpen && onNotes && <NotesPopup title={`${notesOpen === "view" ? "Notes" : "Add note"} · ${h.name}`} value={h.notes ?? ""} readOnly={notesOpen === "view"} onSave={onNotes} onClose={() => setNotesOpen(null)} />}
     </li>
   );
 }
@@ -507,12 +507,13 @@ function AmountWheel({ habit: h, value, step, onChange, onClose }: { habit: Habi
   );
 }
 
-/** The ⋯ on a habit, like a task's: Notes and Delete. */
-function HabitMenu({ name, onNotes, onDelete }: { name: string; onNotes?: () => void; onDelete?: () => void }) {
+/** The ⋯ on a habit, like a task's: Add note (and View notes when there are some) and Delete. */
+function HabitMenu({ name, onNotes, onViewNotes, onDelete }: { name: string; onNotes?: () => void; onViewNotes?: () => void; onDelete?: () => void }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const items = [
-    ...(onNotes ? [{ id: "notes", label: "Notes", icon: NotebookPen }] : []),
+    ...(onNotes ? [{ id: "notes", label: "Add note", icon: NotebookPen }] : []),
+    ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []),
     ...(onDelete ? [{ id: "delete", label: "Delete", icon: Trash2, danger: true }] : []),
   ];
   return (
@@ -525,7 +526,7 @@ function HabitMenu({ name, onNotes, onDelete }: { name: string; onNotes?: () => 
         <DropdownMenu soft anchor={trigger} label="Habit actions" value="" minWidth={200}
           ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
           groups={[{ title: "", items }]}
-          onSelect={(id) => (id === "notes" ? onNotes?.() : onDelete?.())} />
+          onSelect={(id) => (id === "notes" ? onNotes?.() : id === "view" ? onViewNotes?.() : onDelete?.())} />
       )}
     </>
   );
