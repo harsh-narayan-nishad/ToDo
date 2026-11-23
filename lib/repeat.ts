@@ -3,13 +3,14 @@ import { addDays } from "@/lib/days";
 /**
  * How a planned task repeats between the plan's first and last day. Shared by the planner's Repeat dropdown,
  * the sheet's per-task Repeat column, and CSV import.
- *  - patterns: every day, weekdays, weekends, picked weekdays, once a week, once a month;
+ *  - patterns: never (once, on the first day), every day, weekdays, weekends, picked weekdays, once a week, once a month;
  *  - intervals: every 2nd … 7th day, counted from the first day.
  */
 export type Interval = "every-2" | "every-3" | "every-4" | "every-5" | "every-6" | "every-7";
-export type Repeat = "daily" | "weekdays" | "weekends" | "custom" | "weekly" | "monthly" | Interval;
+export type Repeat = "never" | "daily" | "weekdays" | "weekends" | "custom" | "weekly" | "monthly" | Interval;
 
 export const PATTERNS: { id: Repeat; label: string }[] = [
+  { id: "never", label: "Never" },
   { id: "daily", label: "Every day" },
   { id: "weekdays", label: "Weekdays" },
   { id: "weekends", label: "Weekends" },
@@ -31,6 +32,7 @@ export const span = (a: string, b: string) => Math.round((parse(b).getTime() - p
 export function planDays(from: string, to: string, repeat: Repeat, picked: boolean[]): string[] {
   const n = span(from, to);
   if (n < 0 || n > MAX_RANGE_DAYS) return [];
+  if (repeat === "never") return [from];
   const every = repeat.startsWith("every-") ? Number(repeat.slice(6)) : 0;
   const startDow = weekday(from);
   const startDate = parse(from).getDate();
@@ -57,6 +59,7 @@ export function parseRepeat(raw: string): Repeat | null {
   if (!v) return null;
   const n = v.match(/^(?:every\s*)?(\d)(?:st|nd|rd|th)?(?:\s*days?)?$/);
   if (n) return Number(n[1]) === 1 ? "daily" : Number(n[1]) >= 2 && Number(n[1]) <= 7 ? (`every-${n[1]}` as Interval) : null;
+  if (/^(never|no ?repeat|none|once)$/.test(v)) return "never";
   if (/^(daily|every ?day|everyday)$/.test(v)) return "daily";
   if (/^(weekdays?|mon-fri|workdays?)$/.test(v)) return "weekdays";
   if (/^weekends?$/.test(v)) return "weekends";

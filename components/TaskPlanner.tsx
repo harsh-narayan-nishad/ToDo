@@ -200,6 +200,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
                     ))}
                   </div>
                 )}
+                {repeat === "never" && <p className="text-xs text-ink-faint">Once, on the first day ({short(from)}).</p>}
                 {repeat === "weekly" && <p className="text-xs text-ink-faint">Every {parse(from).toLocaleDateString(undefined, { weekday: "long" })}, the weekday of the first day.</p>}
                 {repeat === "monthly" && <p className="text-xs text-ink-faint">On day {parse(from).getDate()} of each month, the date of the first day.</p>}
                 {repeat.startsWith("every-") && <p className="text-xs text-ink-faint">{repeatLabel(repeat)}, counted from the first day: {days.slice(0, 4).map(short).join(", ")}{days.length > 4 ? " …" : ""}</p>}
