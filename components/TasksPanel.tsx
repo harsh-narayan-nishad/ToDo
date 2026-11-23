@@ -165,7 +165,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   const showCal = calShown.length > 0;
   const calSection = showCal ? <CalendarToday key="calendar" events={calShown} onOpen={onOpenCalendar} onToggle={(e) => void toggleEvent(e)} celebrating={calCelebrating} /> : null;
 
-  const habitsSection = <TaskHabits key="habits" refreshKey={refreshKey} onlyDone={filter === "done"} onChanged={onChanged} onOpenHabits={onOpenHabits} />;
+  const habitsSection = <TaskHabits key="habits" refreshKey={refreshKey} onlyDone={filter === "done"} hideDone={filter === "open"} onChanged={onChanged} onOpenHabits={onOpenHabits} />;
 
   return (
     <div className="flex flex-col gap-8 pb-40">

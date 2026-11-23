@@ -384,12 +384,14 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 const sleepPreset = (): Partial<HabitInput> => TEMPLATES.find((t) => t.kind === "sleep")!;
 
 /** One habit for today: its control (tick, or − amount +), name and plan, streak, and the last 7 days. */
-export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete }: {
+export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete, className }: {
   habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onSkip: (on: boolean) => void; onOpen: () => void;
   /** Phones: a rounded card with a round check, like a task card (used in the Tasks list). */
   card?: boolean;
   /** When given: a round Delete button next to Skip (the caller asks to confirm). */
   onDelete?: () => void;
+  /** Extra classes on the row (e.g. the slide-away when it moves to Done). */
+  className?: string;
 }) {
   const e = byDay?.get(now);
   const done = isDone(h, e);
@@ -402,7 +404,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
-    <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "pw-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5")}>
+    <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "pw-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5", className)}>
       {/* The same tick box as a task. On a count or time habit it fills the goal in one go (or clears it). */}
       <button type="button" onClick={() => (amount ? onAmount(done ? 0 : goal(h)) : onToggle())} aria-pressed={done}
         aria-label={done ? `Undo ${h.name}` : h.kind === "quit" ? `Avoided ${h.name} today` : `Mark ${h.name} as done`}

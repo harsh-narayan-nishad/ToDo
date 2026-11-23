@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { ArrowRight, BedDouble, Moon } from "lucide-react";
 import { HabitRow } from "@/components/HabitsPanel";
 import { ConfirmDialog } from "@/components/ui";
@@ -9,10 +10,11 @@ import { habitApi, indexEntries, isDone, isDue, isPlanned, minutesLabel, type En
 
 /**
  * Today's habits inside the Tasks list, checked in right here (same rows as the Habits tab).
- * `onlyDone` = the Done filter: show only habits already done today. Hidden when there is nothing to show
+ * `onlyDone` = the Done filter: show only habits already done today. `hideDone` = the To do filter: a habit done today
+ * slides away and moves to Done, like a ticked task (sleep, once logged, too). Hidden when there is nothing to show
  * (or while the backend has no habit tracker yet).
  */
-export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { refreshKey: number; onlyDone: boolean; onChanged: () => void; onOpenHabits?: () => void }) {
+export function TaskHabits({ refreshKey, onlyDone, hideDone = false, onChanged, onOpenHabits }: { refreshKey: number; onlyDone: boolean; hideDone?: boolean; onChanged: () => void; onOpenHabits?: () => void }) {
   const now = today();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [index, setIndex] = useState<EntryIndex>(new Map());
@@ -90,14 +92,30 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
     for (const [id, p] of pending.current) { clearTimeout(p.timer); void habitApi.set(id, today(), { value: p.value }).catch(() => undefined); }
   }, []);
 
+  /** Habits just done today: shown checked and sliding away for a moment before they move to Done (as tasks do). */
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const wasDone = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const doneNow = new Set(habits.filter((h) => isDone(h, index.get(h.id)?.get(today()))).map((h) => h.id));
+    const before = wasDone.current;
+    wasDone.current = doneNow;
+    if (!before) return; // the first load: nothing to animate
+    const fresh = [...doneNow].filter((id) => !before.has(id));
+    if (!fresh.length) return;
+    setLeaving((s) => new Set([...s, ...fresh]));
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.setTimeout(() => setLeaving((s) => { const n = new Set(s); fresh.forEach((id) => n.delete(id)); return n; }), reduced ? 200 : 750);
+  }, [habits, index]);
+
   const planned = habits.filter((h) => isPlanned(h, now));
   const sleep = planned.find((h) => h.kind === "sleep");
   const others = planned.filter((h) => h.kind !== "sleep");
   const doneCount = planned.filter((h) => isDone(h, index.get(h.id)?.get(now))).length;
   const dueCount = planned.filter((h) => isDue(h, now, index.get(h.id)?.get(now))).length;
-  const shown = onlyDone ? others.filter((h) => isDone(h, index.get(h.id)?.get(now))) : others;
+  const shown = onlyDone ? others.filter((h) => isDone(h, index.get(h.id)?.get(now)))
+    : hideDone ? others.filter((h) => !isDone(h, index.get(h.id)?.get(now)) || leaving.has(h.id)) : others;
   const lastNight = sleep ? index.get(sleep.id)?.get(now) : undefined;
-  const showSleep = sleep && (!onlyDone || !!lastNight);
+  const showSleep = sleep && (onlyDone ? !!lastNight : hideDone ? !lastNight : true);
   if (!shown.length && !showSleep) return null;
 
   return (
@@ -128,7 +146,8 @@ export function TaskHabits({ refreshKey, onlyDone, onChanged, onOpenHabits }: { 
           </li>
         )}
         {shown.map((h) => (
-          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} card onDelete={() => setDeleting(h)} />
+          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} card onDelete={() => setDeleting(h)}
+            className={cn(hideDone && leaving.has(h.id) && "task-done-out")} />
         ))}
       </ul>
       {deleting && (
