@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArchiveRestore, Check, Clock, Flame, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, Check, ChevronsUpDown, Clock, Flame, Pencil, Plus, Trash2, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
-import { GlassDropdown, YearSelect } from "@/components/GlassDropdown";
+import { DropdownMenu, YearSelect } from "@/components/GlassDropdown";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import { AnalogClock, ClockPopup } from "@/components/TaskDialogs";
+import { Marked } from "@/components/TaskSheet";
 import { FIELD, LABEL } from "@/components/ui";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
@@ -66,33 +67,6 @@ export function Segmented<T extends string>({ value, options, onChange, disabled
           {o.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-/** The seven weekdays as round toggles, with quick picks. */
-function DayPicker({ days, setDays }: { days: number[]; setDays: (d: number[]) => void }) {
-  const toggle = (d: number) => {
-    const next = days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort();
-    if (next.length) setDays(next);
-  };
-  const quick: [string, number[]][] = [["Every day", ALL_DAYS], ["Weekdays", [0, 1, 2, 3, 4]], ["Weekends", [5, 6]]];
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Days">
-        {WEEK.map((w, d) => (
-          <button key={w} type="button" onClick={() => toggle(d)} aria-pressed={days.includes(d)} aria-label={w}
-            className={cn("grid h-10 w-10 place-items-center rounded-full border text-xs font-medium transition-colors",
-              days.includes(d) ? "border-ink bg-ink text-canvas" : "border-overlay/20 text-ink-muted")}>
-            {w.slice(0, 2)}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-3 text-xs text-ink-faint">
-        {quick.map(([l, d]) => (
-          <button key={l} type="button" onClick={() => setDays(d)} className={cn("underline-offset-4", daysLabel(days) === l ? "text-ink underline" : "")}>{l}</button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -163,88 +137,216 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
     }
   }
 
+  const catRef = useRef<HTMLButtonElement>(null);
+  const [catOpen, setCatOpen] = useState(false);
+  const goalUnit = kind === "sleep" ? "hours" : kind === "duration" ? "min" : "";
+  const quickDays: { id: string; label: string; days: number[] }[] = [
+    { id: "Every day", label: "Every day", days: ALL_DAYS }, { id: "Weekdays", label: "Weekdays", days: [0, 1, 2, 3, 4] }, { id: "Weekends", label: "Weekends", days: [5, 6] },
+  ];
+
   return (
-    <GlassSheet label={habit ? "Edit habit" : "New habit"} onClose={onClose}>
-      <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <span className={LABEL}>Size</span>
-          <Segmented label="Size" value={scale} options={SCALES} onChange={setScale} />
-          <p className="text-xs text-ink-faint">{SCALES.find((s) => s.id === scale)?.hint}</p>
-        </div>
-        <label className={LABEL}>Name
-          <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Read, Drink water, No sugar" maxLength={80} className={FIELD} />
-        </label>
-        {duplicate && <p className="-mt-4 text-xs text-accent-fast">You already track a habit with this name.</p>}
-        {ideas.length > 0 && (
-          <div className="-mt-3">
-            <p className="mb-2 flex items-center gap-1.5 text-xs text-ink-faint"><Sparkles className="h-3.5 w-3.5" aria-hidden />{scaleLabel(scale)} ideas</p>
-            <div className="flex flex-wrap gap-2">
-              {ideas.map((t) => (
-                <button key={t.name} type="button" onClick={() => applyIdea(t)} title={t.cue || t.name}
-                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-overlay/15 bg-overlay/5 px-3.5 py-1.5 text-sm text-ink">
-                  <span className="truncate">{t.name}</span>
-                  <span className="shrink-0 text-xs text-ink-faint">{goalLabel({ ...t, id: "", startDay: "", archived: false, createdAt: "" }) || kindLabel(t.kind).toLowerCase()}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <span className={LABEL}>Type{habit && <span className="ml-2 text-xs text-ink-faint">(can't be changed)</span>}</span>
-          <Segmented label="Type" value={kind} options={KINDS.filter((k) => k.id !== "sleep" || kind === "sleep")} onChange={pickKind} disabled={!!habit} />
-          <p className="text-xs text-ink-faint">{KINDS.find((k) => k.id === kind)?.hint}</p>
-        </div>
+    <SettingsSheet label={habit ? "Edit habit" : "New habit"} onClose={onClose}>
+      <form onSubmit={(e) => void submit(e)} className="flex flex-col">
+        <Section title="Size" note={SCALES.find((s) => s.id === scale)?.hint}>
+          <Segmented soft label="Size" value={scale} options={SCALES} onChange={setScale} />
+        </Section>
+
+        <Section title="Name" note={duplicate ? <span className="text-accent-fast">You already track a habit with this name.</span> : undefined}>
+          <NameField inputRef={nameRef} value={name} onChange={setName} ideas={ideas} onPick={applyIdea} label={`${scaleLabel(scale)} ideas`} />
+        </Section>
+
+        <Section title="Type" note={habit ? "The type can't be changed once added." : KINDS.find((k) => k.id === kind)?.hint}>
+          <Segmented soft label="Type" value={kind} options={KINDS.filter((k) => k.id !== "sleep" || kind === "sleep")} onChange={pickKind} disabled={!!habit} />
+        </Section>
+
         {(kind === "count" || kind === "duration" || kind === "sleep") && (
-          <div className="grid grid-cols-2 gap-5">
-            <label className={LABEL}>{kind === "sleep" ? "Goal (hours a night)" : kind === "duration" ? "Goal (minutes a day)" : "Goal (a day)"}
-              <input type="number" inputMode="decimal" min={1} step={kind === "sleep" ? 0.5 : 1} value={target} onChange={(e) => setTarget(e.target.value)} className={FIELD} />
-            </label>
-            {kind === "count" && (
-              <label className={LABEL}>Unit (optional)
-                <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="glasses, steps, pages…" maxLength={20} className={FIELD} />
+          <Section title="Goal">
+            <div className="pw-group overflow-hidden rounded-[14px]">
+              <label className={cn(ROW, kind === "count" && ROW_LINE)}>
+                <span className="shrink-0 text-[17px] text-ink">{kind === "sleep" ? "Hours a night" : kind === "duration" ? "Minutes a day" : "A day"}</span>
+                <input type="number" inputMode="decimal" min={1} step={kind === "sleep" ? 0.5 : 1} value={target} onChange={(e) => setTarget(e.target.value)} className={cn(ROW_INPUT, "text-right tabular-nums")} />
+                {goalUnit && <span className="shrink-0 text-[17px] text-ink-muted">{goalUnit}</span>}
               </label>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <span className={LABEL}>Days</span>
-          <DayPicker days={days} setDays={setDays} />
-        </div>
-        {kind !== "sleep" && (
-          <div className={LABEL}>
-            <span>Time (optional)</span>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setTimeOpen(true)} aria-label={time ? `Time: ${clock(time)}. Change` : "Pick a time"}
-                className={cn(FIELD, "flex items-center justify-between text-left", !time && "text-ink-faint")}>
-                <span className="tabular-nums">{time ? clock(time) : "Any time"}</span>
-                <Clock className="h-4 w-4 text-ink-muted" aria-hidden />
-              </button>
-              {time && <button type="button" onClick={() => setTime(null)} aria-label="Clear the time" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted"><X className="h-4 w-4" /></button>}
+              {kind === "count" && (
+                <label className={ROW}>
+                  <span className="shrink-0 text-[17px] text-ink">Unit</span>
+                  <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="glasses, steps, pages…" maxLength={20} className={cn(ROW_INPUT, "text-right")} />
+                </label>
+              )}
             </div>
-            {timeOpen && (
-              <ClockPopup title="Time" onClose={() => setTimeOpen(false)}>
-                <AnalogClock label="Time" value={time ?? "07:00"} onChange={setTime} />
-              </ClockPopup>
+          </Section>
+        )}
+
+        <Section title="Schedule">
+          <div className="pw-group overflow-hidden rounded-[14px]">
+            <div className={cn("flex flex-col gap-3 px-4 py-3.5", ROW_LINE)}>
+              <div className="flex justify-between gap-1" role="group" aria-label="Days">
+                {WEEK.map((w, d) => (
+                  <button key={w} type="button" onClick={() => { const next = days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort(); if (next.length) setDays(next); }} aria-pressed={days.includes(d)} aria-label={w}
+                    className={cn("grid h-10 w-10 place-items-center rounded-full text-[13px] font-semibold transition-colors active:scale-95",
+                      days.includes(d) ? "bg-[#3478F6] text-white" : "bg-overlay/[0.08] text-ink-muted")}>
+                    {w.slice(0, 2)}
+                  </button>
+                ))}
+              </div>
+              <Segmented soft label="Quick pick" value={daysLabel(days)} options={quickDays} onChange={(id) => setDays(quickDays.find((q) => q.id === id)!.days)} />
+            </div>
+            {kind !== "sleep" && (
+              <div className={cn(ROW, ROW_LINE)}>
+                <button type="button" onClick={() => setTimeOpen(true)} aria-label={time ? `Time: ${clock(time)}. Change` : "Pick a time"} className="flex min-h-[46px] flex-1 items-center gap-3 text-left">
+                  <span className="flex-1 text-[17px] text-ink">Time</span>
+                  <span className={cn("text-[17px] tabular-nums", time ? "text-[#3478F6]" : "text-ink-muted")}>{time ? clock(time) : "Any time"}</span>
+                  {!time && <Clock className="h-[18px] w-[18px] text-ink-faint" aria-hidden />}
+                </button>
+                {time && <button type="button" onClick={() => setTime(null)} aria-label="Clear the time" className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-overlay/[0.12] text-ink-muted"><X className="h-3.5 w-3.5" strokeWidth={2.5} /></button>}
+              </div>
+            )}
+            {kind !== "sleep" && (
+              <button ref={catRef} type="button" onClick={() => setCatOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={catOpen} aria-label={`Category: ${categoryLabel(category)}`}
+                className={cn(ROW, "w-full text-left transition-colors active:bg-overlay/[0.06]")}>
+                <span className="flex-1 text-[17px] text-ink">Category</span>
+                <span className="text-[17px] text-ink-muted">{categoryLabel(category)}</span>
+                <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+              </button>
             )}
           </div>
-        )}
-        {kind !== "sleep" && (
-          <div className="flex flex-col gap-2">
-            <span className={LABEL}>Category</span>
-            <GlassDropdown label="Category" value={category} display={categoryLabel(category)} onSelect={(id) => setCategory(id as HabitCategory)}
+          {catOpen && (
+            <DropdownMenu soft anchor={catRef} label="Category" value={category} minWidth={220} onSelect={(id) => setCategory(id as HabitCategory)} onClose={() => setCatOpen(false)}
               groups={[{ title: "", items: CATEGORIES.filter((c) => c.id !== "sleep").map((c) => ({ id: c.id, label: c.label })) }]} />
+          )}
+          {timeOpen && (
+            <ClockPopup title="Time" onClose={() => setTimeOpen(false)}>
+              <AnalogClock label="Time" value={time ?? "07:00"} onChange={setTime} />
+            </ClockPopup>
+          )}
+        </Section>
+
+        <Section title="Cue or reason" note="Optional. A cue makes a habit easier to keep.">
+          <div className="pw-group rounded-[14px] px-4">
+            <input value={cue} onChange={(e) => setCue(e.target.value)} placeholder="After I…, so that I…" maxLength={200} aria-label="Cue or reason" className={cn(ROW_INPUT, "min-h-[46px] py-2.5")} />
           </div>
-        )}
-        <label className={LABEL}>Cue or reason (optional)
-          <input value={cue} onChange={(e) => setCue(e.target.value)} placeholder="After I…, so that I…" maxLength={200} className={FIELD} />
-        </label>
-        {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
-          <GlassButton type="submit" strong disabled={busy || !name.trim()}>{busy ? <ButtonWheel /> : habit ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{busy ? "Saving…" : habit ? "Save" : "Add habit"}</GlassButton>
+        </Section>
+
+        {error && <p className="-mt-3 mb-5 px-4 text-[15px] text-accent-extreme" role="alert">{error}</p>}
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} disabled={busy}
+            className="h-12 flex-1 rounded-full bg-overlay/[0.08] text-[17px] font-medium text-ink transition-transform active:scale-[0.98] disabled:opacity-40">Cancel</button>
+          <button type="submit" disabled={busy || !name.trim()}
+            className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#3478F6] text-[17px] font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40">
+            {busy ? <ButtonWheel /> : habit ? <Check className="h-[18px] w-[18px]" strokeWidth={2.5} /> : <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} />}{busy ? "Saving…" : habit ? "Save" : "Add habit"}
+          </button>
         </div>
       </form>
-    </GlassSheet>
+    </SettingsSheet>
+  );
+}
+
+/** Settings-style rows for the habit editor: a row inside a rounded group, its divider, and a borderless input. */
+const ROW = "flex min-h-[46px] items-center gap-3 px-4";
+const ROW_LINE = "border-b border-overlay/10";
+const ROW_INPUT = "w-full min-w-0 flex-1 bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-faint";
+
+/**
+ * The habit's name, with ready-made ideas in the app's standard suggestion list (as under a task's Title cell):
+ * a list floating below the field while it has focus, the typed words highlighted, ↑ ↓ to move, Enter to pick, Esc to hide.
+ */
+function NameField({ inputRef, value, onChange, ideas, onPick, label }: {
+  inputRef: React.RefObject<HTMLInputElement>; value: string; onChange: (v: string) => void; ideas: HabitInput[]; onPick: (t: HabitInput) => void; label: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+  const show = open && ideas.length > 0;
+  useEffect(() => setActive(-1), [value]);
+
+  const place = () => {
+    const r = box.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = Math.min(r.width, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
+    setPos(window.innerHeight - r.bottom < 300 && r.top > window.innerHeight - r.bottom ? { left, width, bottom: window.innerHeight - r.top + 4 } : { left, width, top: r.bottom + 4 });
+  };
+  useLayoutEffect(() => { if (show) place(); }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!show) return;
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (t: HabitInput) => { onPick(t); setOpen(false); inputRef.current?.focus(); };
+  const detail = (t: HabitInput) => [goalLabel({ ...t, id: "", startDay: "", archived: false, createdAt: "" }) || kindLabel(t.kind), categoryLabel(t.category)].join(" · ");
+
+  return (
+    <div ref={box} className="pw-group rounded-[14px] px-4">
+      <input ref={inputRef} value={value} placeholder="e.g. Read, Drink water, No sugar" maxLength={80} autoComplete="off"
+        role="combobox" aria-expanded={show} aria-autocomplete="list" aria-label="Name"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onBlur={(e) => { if (!list.current?.contains(e.relatedTarget as Node)) setOpen(false); }}
+        onKeyDown={(e) => {
+          if (!show) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(ideas.length - 1, a + 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(-1, a - 1)); }
+          else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(ideas[active]); }
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+        }}
+        className={cn(ROW_INPUT, "min-h-[46px] py-2.5")} />
+      {show && pos && createPortal(
+        <ul ref={list} role="listbox" aria-label={label}
+          className="pw-menu glass-in fixed z-[160] max-h-72 overflow-y-auto rounded-[14px]"
+          style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}>
+          {ideas.map((t, i) => (
+            <li key={t.name} role="option" aria-selected={i === active}>
+              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(t)} onMouseEnter={() => setActive(i)} title={t.cue || t.name}
+                className={cn("block w-full pl-4 text-left transition-colors active:bg-overlay/[0.08]", i === active && "bg-overlay/[0.06]")}>
+                <span className={cn("block min-w-0 py-[11px] pr-4", i < ideas.length - 1 && "border-b border-overlay/10")}>
+                  <span className="block truncate text-[17px] leading-snug text-ink"><Marked text={t.name} q={value} /></span>
+                  <span className="mt-0.5 block truncate text-[13px] text-ink-muted">{detail(t)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+/** A titled block of the settings-style editor: small caps heading, the content, and a quiet footnote. */
+function Section({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="mb-7">
+      <p className="mb-1.5 px-4 text-[13px] uppercase tracking-wide text-ink-muted">{title}</p>
+      {children}
+      {note && <p className="mt-1.5 px-4 text-[13px] text-ink-muted">{note}</p>}
+    </div>
+  );
+}
+
+/** The habit editor's sheet, built like the Menu: a grey grouped page with white rounded groups over a dimmed screen. */
+function SettingsSheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  return createPortal(
+    <div className="pw-menu-backdrop fade-in fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pw-grouped-bg glass-in flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[20px] bg-canvas shadow-themed sm:max-h-[88dvh] sm:rounded-[20px]">
+        <div className="flex items-center justify-between gap-4 px-5 pb-2 pt-5">
+          <h2 className="min-w-0 truncate text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{label}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-overlay/[0.08] text-ink-muted transition-transform active:scale-95"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">{children}</div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

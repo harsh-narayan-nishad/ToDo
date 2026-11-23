@@ -512,7 +512,7 @@ function TimeCell({ cell, value, disabled, onChange, onPaste, onKeyDown, onClock
 }
 
 /** Wraps the searched words in <mark>, as the Pacewise docs search does. */
-function Marked({ text, q }: { text: string; q: string }) {
+export function Marked({ text, q }: { text: string; q: string }) {
   const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   if (!words.length) return <>{text}</>;
   const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));

@@ -11,7 +11,7 @@ import { weekday } from "@/lib/repeat";
  */
 export type HabitKind = "check" | "count" | "duration" | "sleep" | "quit";
 export type HabitScale = "micro" | "daily" | "macro";
-export type HabitCategory = "health" | "fitness" | "mind" | "sleep" | "learning" | "work" | "social" | "finance" | "home" | "other";
+export type HabitCategory = "health" | "fitness" | "mind" | "sleep" | "learning" | "work" | "social" | "finance" | "home" | "spiritual" | "other";
 
 export interface Habit {
   id: string;
@@ -48,7 +48,7 @@ export const SCALES: { id: HabitScale; label: string; hint: string }[] = [
 export const CATEGORIES: { id: HabitCategory; label: string }[] = [
   { id: "health", label: "Health" }, { id: "fitness", label: "Fitness" }, { id: "mind", label: "Mind" }, { id: "sleep", label: "Sleep" },
   { id: "learning", label: "Learning" }, { id: "work", label: "Work" }, { id: "social", label: "Social" }, { id: "finance", label: "Finance" },
-  { id: "home", label: "Home" }, { id: "other", label: "Other" },
+  { id: "home", label: "Home" }, { id: "spiritual", label: "Spiritual" }, { id: "other", label: "Other" },
 ];
 export const kindLabel = (k: HabitKind) => KINDS.find((x) => x.id === k)?.label ?? k;
 export const scaleLabel = (s: HabitScale) => SCALES.find((x) => x.id === s)?.label ?? s;

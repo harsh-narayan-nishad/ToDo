@@ -1,10 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Pacewise To-do",
   description: "Tasks, time worked and consistency, linked to your Pacewise calendar.",
 };
+
+/** `viewport-fit=cover` so env(safe-area-inset-bottom) is real: the phone tab bar keeps its height above the home indicator when the browser's toolbar collapses on scroll. */
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
