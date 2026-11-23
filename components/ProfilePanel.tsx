@@ -55,54 +55,107 @@ const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 6
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
- * The last 7 days as a bar chart: the week's total on top, bars of time worked per day against
- * gridlines with their values on the right, a dashed line between days, and a legend underneath. Click a day to open it.
+ * The last 7 days as a bar chart of one measure at a time, picked in the switch on the right: Time worked (the
+ * scale reads 1h / 30m / 0) or Tasks finished (the scale reads counts), so the bars, the numbers above them and the
+ * scale always mean the same thing. One bar per day on a faint full-height track, a dashed daily-average line,
+ * today picked out, a hover card with the day's numbers, and a legend underneath. Click a day to open it.
  */
 function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: string) => void }) {
+  const [hovered, setHovered] = useState<{ d: HeatDay; x: number; y: number } | null>(null);
   const total = days.reduce((a, d) => a + d.minutes, 0);
   const finished = days.reduce((a, d) => a + d.completed, 0);
   const added = days.reduce((a, d) => a + d.created, 0);
   const best = days.reduce<HeatDay | null>((b, d) => (d.minutes > (b?.minutes ?? 0) ? d : b), null);
-  // A round top for the scale: the busiest day, up to the next half hour (at least an hour).
-  const top = Math.max(60, Math.ceil(Math.max(...days.map((d) => d.minutes), 0) / 30) * 30);
+  // Opens on time worked, or on tasks finished when no time was logged this week.
+  const [measure, setMeasure] = useState<"time" | "tasks">(() => (total === 0 && finished > 0 ? "tasks" : "time"));
+  const time = measure === "time";
+  const value = (d: HeatDay) => (time ? d.minutes : d.completed);
+  const fmt = (v: number) => (time ? hm(v) : `${v} ${v === 1 ? "task" : "tasks"}`);
+  // A round top for the scale: time up to the next half hour (at least an hour); tasks up to the next even count (at least 2).
+  const peak = Math.max(0, ...days.map(value));
+  const top = time ? Math.max(60, Math.ceil(peak / 30) * 30) : Math.max(2, Math.ceil(peak / 2) * 2);
+  const sum = time ? total : finished;
+  const avg = days.length ? sum / days.length : 0;
   const label = (d: HeatDay) => { const l = dayLabel(d.day); return l === "Today" ? "Today" : WEEKDAY[new Date(d.day + "T12:00").getDay()]; };
+  const isToday = (d: HeatDay) => dayLabel(d.day) === "Today";
+  const barColor = time ? "bg-accent-slow" : "bg-[#5ED3D3]";
 
   return (
     <Card className="pw-card">
-      <div className="mb-1 flex items-center gap-2"><Flame className="h-4 w-4 text-accent-fast" /><h2 className="text-sm uppercase tracking-wide text-ink-muted">Last 7 days</h2></div>
-      <p className="mb-5 font-display text-3xl text-ink">{hm(total)}</p>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><Flame className="h-4 w-4 text-accent-fast" /><h2 className="text-sm uppercase tracking-wide text-ink-muted">Last 7 days</h2></div>
+        {/* the measure the bars show */}
+        <div className="flex shrink-0 rounded-full bg-overlay/[0.07] p-0.5 text-xs" role="group" aria-label="Bars show">
+          {([["time", "Time"], ["tasks", "Tasks"]] as const).map(([id, name]) => (
+            <button key={id} type="button" aria-pressed={measure === id} onClick={() => setMeasure(id)}
+              className={cn("rounded-full px-3 py-1 transition-colors", measure === id ? "bg-canvas-raised text-ink shadow-themed" : "text-ink-muted")}>{name}</button>
+          ))}
+        </div>
+      </div>
+      <p className="font-display text-3xl text-ink">{time ? hm(total) : `${finished} ${finished === 1 ? "task" : "tasks"}`}</p>
+      <p className="mb-4 mt-0.5 text-xs text-ink-faint">
+        {sum ? `Daily average ${time ? hm(Math.round(avg)) : (Math.round(avg * 10) / 10).toString()}${time ? "" : " finished"}` : time ? "Log time on a task to fill the bars" : "Finish a task to fill the bars"}
+      </p>
 
+      {/* what the bars and the scale measure, and what the dashed line is */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-ink-muted">
+        <span className="flex items-center gap-1.5"><span className={cn("h-2.5 w-2.5 shrink-0 rounded-[3px]", barColor)} aria-hidden />{time ? "Time worked per day (hours and minutes)" : "Tasks finished per day (number of tasks)"}</span>
+        {avg > 0 && <span className="flex items-center gap-1.5"><span className={cn("w-4 border-t border-dashed", time ? "border-accent-slow" : "border-[#5ED3D3]")} aria-hidden />Daily average</span>}
+      </div>
       <div className="flex gap-3">
         <div className="relative h-40 flex-1">
           {/* gridlines: top, middle, zero */}
           {[0, 0.5, 1].map((f) => <span key={f} className={cn("pointer-events-none absolute inset-x-0 border-t", f === 1 ? "border-overlay/25" : "border-overlay/10")} style={{ top: `${f * 100}%` }} aria-hidden />)}
+          {/* the daily average, dashed */}
+          {avg > 0 && <span className={cn("pointer-events-none absolute inset-x-0 z-10 border-t border-dashed", time ? "border-accent-slow/70" : "border-[#5ED3D3]/80")} style={{ bottom: `${(avg / top) * 100}%` }} aria-hidden />}
           <div className="absolute inset-0 flex">
-            {days.map((d, i) => (
-              <button key={d.day} type="button" onClick={() => onOpenDay(d.day)} title={`${longDay(d.day)}: ${duration(d.minutes)} worked, ${d.completed} finished, ${d.created} added`}
-                aria-label={`${longDay(d.day)}: ${duration(d.minutes)}`}
-                className={cn("group relative flex h-full min-w-0 flex-1 items-end justify-center", i > 0 && "border-l border-dashed border-overlay/10")}>
-                <span className={cn("w-[62%] max-w-10 rounded-t-[3px] transition-[height] duration-500", d.minutes > 0 ? "bg-accent-slow" : "bg-transparent")}
-                  style={{ height: `${(d.minutes / top) * 100}%`, minHeight: d.minutes > 0 ? 3 : 0 }} />
-              </button>
-            ))}
+            {days.map((d, i) => {
+              const v = value(d);
+              const show = (el: HTMLElement) => { const r = el.getBoundingClientRect(); setHovered({ d, x: r.left + r.width / 2, y: r.top }); };
+              return (
+                <button key={d.day} type="button" onClick={() => onOpenDay(d.day)}
+                  aria-label={`${longDay(d.day)}: ${duration(d.minutes)} worked, ${d.completed} finished, ${d.created} added`}
+                  onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setHovered(null)} onFocus={(e) => show(e.currentTarget)} onBlur={() => setHovered(null)}
+                  className={cn("relative flex h-full min-w-0 flex-1 items-end justify-center outline-none transition-colors hover:bg-overlay/[0.035] focus-visible:bg-overlay/[0.05]",
+                    i > 0 && "border-l border-dashed border-overlay/10", isToday(d) && "bg-overlay/[0.03]")}>
+                  {/* the track, and the bar in it with its value above */}
+                  <div className="relative h-full w-[58%] max-w-[28px] rounded-t-[6px] bg-overlay/[0.05]">
+                    <div className={cn("absolute inset-x-0 bottom-0 rounded-t-[6px] transition-[height] duration-500", barColor)}
+                      style={{ height: `${(v / top) * 100}%`, minHeight: v > 0 ? 3 : 0 }}>
+                      {v > 0 && <span className="absolute left-1/2 -top-4 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tabular-nums leading-none text-ink-muted">{fmt(v)}</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
-        {/* values on the right, like 60m / 30m / 0 */}
-        <div className="relative h-40 w-10 shrink-0 text-xs tabular-nums text-ink-faint" aria-hidden>
-          <span className="absolute left-0 top-0 -translate-y-1/2">{hm(top)}</span>
-          <span className="absolute left-0 top-1/2 -translate-y-1/2">{hm(top / 2)}</span>
+        {/* the scale on the right, in the measure shown */}
+        <div className="relative h-40 w-14 shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-faint" aria-hidden>
+          <span className="absolute left-0 top-0 -translate-y-1/2">{fmt(top)}</span>
+          <span className="absolute left-0 top-1/2 -translate-y-1/2">{fmt(top / 2)}</span>
           <span className="absolute bottom-0 left-0 translate-y-1/2">0</span>
         </div>
       </div>
-      <div className="mr-[3.25rem] mt-2 flex">
-        {days.map((d) => <span key={d.day} className="flex-1 text-center text-xs text-ink-muted">{label(d)}</span>)}
+      <div className="mr-[4.25rem] mt-2 flex">
+        {days.map((d) => <span key={d.day} className={cn("flex-1 text-center text-xs", isToday(d) ? "font-medium text-ink" : "text-ink-muted")}>{label(d)}</span>)}
       </div>
 
       <div className="mt-5 grid grid-cols-3 gap-3 border-t border-overlay/10 pt-4 text-sm">
-        <div><p className="text-accent-slow">Time worked</p><p className="mt-0.5 text-ink">{hm(total)}</p></div>
-        <div><p className="text-[#5ED3D3]">Tasks finished</p><p className="mt-0.5 text-ink">{finished}{added ? <span className="text-ink-faint"> of {added} added</span> : null}</p></div>
+        <div><p className="flex items-center gap-1.5 text-accent-slow"><span className="h-2 w-2 shrink-0 rounded-full bg-accent-slow" aria-hidden />Time worked</p><p className="mt-0.5 text-ink">{hm(total)}</p></div>
+        <div><p className="flex items-center gap-1.5 text-[#5ED3D3]"><span className="h-2 w-2 shrink-0 rounded-full bg-[#5ED3D3]" aria-hidden />Tasks finished</p><p className="mt-0.5 text-ink">{finished}{added ? <span className="text-ink-faint"> of {added} added</span> : null}</p></div>
         <div><p className="text-accent-fast">Best day</p><p className="mt-0.5 text-ink">{best ? `${label(best)} · ${hm(best.minutes)}` : "–"}</p></div>
       </div>
+
+      {hovered && (
+        <div role="tooltip" className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-2xl border border-overlay/10 bg-canvas-raised px-3.5 py-2.5 text-[13px] leading-snug text-ink shadow-themed"
+          style={{ left: hovered.x, top: hovered.y - 8 }}>
+          <div className="mb-1 font-display text-base tracking-[-0.02em] text-ink">{longDay(hovered.d.day)}</div>
+          <div className="flex items-center gap-1.5 text-ink-muted"><span className="h-2 w-2 rounded-full bg-accent-slow" aria-hidden />Time worked: {duration(hovered.d.minutes)}</div>
+          <div className="flex items-center gap-1.5 text-ink-muted"><span className="h-2 w-2 rounded-full bg-[#5ED3D3]" aria-hidden />Tasks finished: {hovered.d.completed}</div>
+          <div className="pl-3.5 text-ink-muted">Tasks added: {hovered.d.created}</div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -94,7 +94,13 @@ export function TodoApp() {
     window.addEventListener("focus", onVisible);
     return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
   }, []);
-  const openDay = useCallback((day: string) => { setHistoryDay(day); setTab("history"); }, []);
+  /** Opening a day (a bar or a square on the Profile) starts the day page at its top, not where the Profile was scrolled to. */
+  const openDay = useCallback((day: string) => {
+    setHistoryDay(day);
+    setTab("history");
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior }));
+  }, []);
   /**
    * Back between sections: every section opened gets its own browser history entry, so the phone's Back button
    * (or swipe) and the ← button both go to the section before, and only leave the app from Tasks.

@@ -117,7 +117,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   useEffect(() => setPages({}), [filter]);
   const groups = useMemo(() => {
     const list = (tasks ?? []).filter((t) => filter === "all" || t.status === filter);
-    const sort = (a: Task, b: Task) => a.dueDay.localeCompare(b.dueDay) || RANK[a.priority] - RANK[b.priority];
+    // By due day (as before), then by start time within the day (tasks without a time first), then priority.
+    const sort = (a: Task, b: Task) => a.dueDay.localeCompare(b.dueDay) || (a.startTime ?? "").localeCompare(b.startTime ?? "") || RANK[a.priority] - RANK[b.priority];
     const open = list.filter((t) => t.status === "open").sort(sort);
     return [
       { key: "overdue", title: "Overdue", items: open.filter((t) => t.dueDay < now) },

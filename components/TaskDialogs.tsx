@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { Button, FIELD, LABEL } from "@/components/ui";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
 import { ButtonWheel } from "@/components/WheelSpinner";
+import OptionWheel from "@/components/OptionWheel";
 
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -303,6 +304,7 @@ export function LogTimeDialog({ task, onClose, onLogged }: { task: Task; onClose
   const [startTime, setStartTime] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wheel, setWheel] = useState(false);
   const total = (Number(hours) || 0) * 60 + (Number(mins) || 0);
   const passedToday = nowLocal().minutes;
   // "Just finished" = the block that ends this minute; only possible if it started today.
@@ -348,6 +350,16 @@ export function LogTimeDialog({ task, onClose, onLogged }: { task: Task; onClose
             {day === now ? `So far today: ${duration(passedToday)} have passed, so you can log up to that.` : `Forgot to log? You can fill in the last ${BACKFILL_DAYS} days too.`}
           </p>
         </div>
+        {/* Tap to pick the time worked on the Pacewise option wheel (scroll or drag), as on a time habit. */}
+        <div className={LABEL}>
+          <span>Time worked</span>
+          <button type="button" onClick={() => setWheel(true)} aria-label={`Time worked: ${duration(total)}. Pick on the wheel`}
+            className={cn(FIELD, "flex items-center justify-between text-left", wheel && "border-accent-medium")}>
+            <span className="tabular-nums">{duration(total)}</span>
+            <ChevronDown className="h-4 w-4 text-ink-muted" aria-hidden />
+          </button>
+        </div>
+        {wheel && <WorkWheel value={total} onChange={(m) => { setHours(String(Math.floor(m / 60))); setMins(String(m % 60)); }} onClose={() => setWheel(false)} />}
         <div className="grid grid-cols-2 gap-5">
           <label className={LABEL}>Hours<input type="number" inputMode="numeric" min={0} max={16} value={hours} onChange={(e) => setHours(e.target.value)} className={FIELD} /></label>
           <label className={LABEL}>Minutes<input type="number" inputMode="numeric" min={0} max={59} value={mins} onChange={(e) => setMins(e.target.value)} className={FIELD} /></label>
@@ -380,5 +392,41 @@ export function LogTimeDialog({ task, onClose, onLogged }: { task: Task; onClose
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** The Pacewise option wheel for time worked on a task: 5-minute steps up to 16 hours. */
+function WorkWheel({ value, onChange, onClose }: { value: number; onChange: (m: number) => void; onClose: () => void }) {
+  const values = useMemo(() => {
+    const list: number[] = [];
+    for (let v = 5; v <= 16 * 60; v += 5) list.push(v);
+    if (value > 0 && value <= 16 * 60 && !list.includes(value)) list.push(value);
+    return list.sort((a, b) => a - b);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- fixed while open, so the wheel's rows never shift under it
+  return (
+    <ClockPopup title="Time worked" onClose={onClose}>
+      <p className="-mt-2 text-sm text-ink-muted">Scroll or drag to set how long you worked.</p>
+      <div className="relative h-64">
+        <span className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 border-y border-overlay/15 bg-overlay/[0.04]" aria-hidden />
+        <OptionWheel
+          items={values.map((v) => duration(v))}
+          defaultSelected={Math.max(0, values.indexOf(value))}
+          textColor="rgb(var(--ink-faint))"
+          activeColor="rgb(var(--ink))"
+          side="left"
+          fontSize={1.75}
+          spacing={1.6}
+          curve={1}
+          tilt={8}
+          blur={1.5}
+          fade={0.28}
+          smoothing={160}
+          inset={24}
+          loop={false}
+          draggable
+          onChange={(i) => onChange(values[i])}
+        />
+      </div>
+    </ClockPopup>
   );
 }
