@@ -32,6 +32,8 @@ function Row({ icon: Icon, tint, label, value, mark = "chevron", danger, onClick
     </button>
   );
 }
+/** Phones: full screen stays on (across reloads) until turned off in the menu. */
+const FULL_KEY = "pacewise-todo-fullscreen";
 /** Icon tile colours per section. */
 const TINT: Record<string, string> = { tasks: "#3478F6", habits: "#30C26A", profile: "#8C8F98", calendar: "#F2453D" };
 
@@ -68,13 +70,39 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
     document.addEventListener("webkitfullscreenchange", sync);
     return () => { document.removeEventListener("fullscreenchange", sync); document.removeEventListener("webkitfullscreenchange", sync); };
   }, []);
-  const toggleFull = () => {
-    const d = document as FsDoc;
+  const enterFull = () => {
     const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
-    try {
-      if (d.fullscreenElement || d.webkitFullscreenElement) void (d.exitFullscreen ? d.exitFullscreen() : d.webkitExitFullscreen?.())?.catch(() => {});
-      else void (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.())?.catch(() => {});
-    } catch { /* the browser said no */ }
+    try { void (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.())?.catch(() => {}); } catch { /* the browser said no */ }
+  };
+  const exitFull = () => {
+    const d = document as FsDoc;
+    try { if (d.fullscreenElement || d.webkitFullscreenElement) void (d.exitFullscreen ? d.exitFullscreen() : d.webkitExitFullscreen?.())?.catch(() => {}); } catch { /* already out */ }
+  };
+  /**
+   * Phones: full screen is sticky. Once turned on it stays wanted (remembered across reloads) until turned off here;
+   * if the browser leaves it (back gesture, Esc), the next tap anywhere goes back in. Browsers only allow entering
+   * on a tap, so it cannot be forced sooner, and the tap still does what it normally does.
+   */
+  const isPhone = () => window.matchMedia("(max-width: 767px)").matches;
+  const [keepFull, setKeepFull] = useState(false);
+  useEffect(() => { try { setKeepFull(localStorage.getItem(FULL_KEY) === "1" && isPhone()); } catch { /* no storage */ } }, []);
+  useEffect(() => {
+    if (!keepFull || full) return;
+    // Not from inside the menu, so turning it off there is not undone by the same tap.
+    const back = (e: Event) => { if (isPhone() && !(e.target instanceof Element && e.target.closest('[role="dialog"][aria-label="Menu"]'))) enterFull(); };
+    document.addEventListener("touchend", back, true);
+    document.addEventListener("click", back, true);
+    return () => { document.removeEventListener("touchend", back, true); document.removeEventListener("click", back, true); };
+  }, [keepFull, full]);
+  const toggleFull = () => {
+    if (isPhone()) {
+      const on = !keepFull;
+      setKeepFull(on);
+      try { if (on) localStorage.setItem(FULL_KEY, "1"); else localStorage.removeItem(FULL_KEY); } catch { /* no storage */ }
+      if (on) enterFull(); else exitFull();
+      return;
+    }
+    if (full) exitFull(); else enterFull();
   };
 
   /** Slide out, then unmount. */
@@ -142,7 +170,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
                 {onTour && <Row icon={Compass} tint="#30C26A" label="Tour" value="Guide" onClick={() => { close(); onTour(); }} />}
                 {/* History lives here instead of in the section tabs. */}
                 <Row icon={History} tint="#F59A23" label="History" onClick={() => { onHistory(); close(); }} />
-                {canFull && <Row icon={full ? Minimize : Maximize} tint="#3478F6" label="Full screen" value={full ? "On" : "Off"} mark="none" onClick={() => { toggleFull(); close(); }} />}
+                {canFull && <Row icon={full || keepFull ? Minimize : Maximize} tint="#3478F6" label="Full screen" value={full || keepFull ? "On" : "Off"} mark="none" onClick={() => { toggleFull(); close(); }} />}
                 <Row icon={Palette} tint="#6A5AE0" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}
                   onClick={() => setSection(section === "theme" ? null : "theme")} />
                 {section === "theme" && ([[true, "Light", Sun], [false, "Dark", Moon]] as const).map(([isLight, label, Icon], i) => (
