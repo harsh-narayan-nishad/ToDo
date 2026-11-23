@@ -430,3 +430,88 @@ function WorkWheel({ value, onChange, onClose }: { value: number; onChange: (m: 
     </ClockPopup>
   );
 }
+
+/**
+ * Your own notes on a task or habit (how to beat it, what works), in the same popup as the option wheel.
+ * Read them, type to change them; they are saved when the popup closes (Done, a tap outside, or Esc).
+ */
+export function NotesPopup({ title, value, placeholder, onSave, onClose }: {
+  title: string; value: string; placeholder?: string; onSave: (notes: string) => Promise<void>; onClose: () => void;
+}) {
+  const [text, setText] = useState(value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const close = async () => {
+    if (busy) return;
+    if (text.trim() === value.trim()) { onClose(); return; }
+    setBusy(true);
+    setError(null);
+    try { await onSave(text.trim()); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Could not save the notes."); setBusy(false); }
+  };
+  return (
+    <ClockPopup title={title} onClose={() => void close()}>
+      <p className="-mt-2 text-sm text-ink-muted">Your notes: how to beat it, what works, what to remember. Saved when you close this.</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} maxLength={2000} placeholder={placeholder ?? "e.g. Start with the easiest part. Phone in another room."} autoFocus
+        className="w-full resize-none rounded-2xl border border-overlay/10 bg-overlay/[0.04] px-4 py-3 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-overlay/25" />
+      <p className="-mt-2 text-right text-xs tabular-nums text-ink-faint">{busy ? "Saving…" : `${text.length} / 2000`}</p>
+      {error && <p className="-mt-2 text-sm text-accent-extreme" role="alert">{error}</p>}
+    </ClockPopup>
+  );
+}
+
+/**
+ * Time spent on a task today, on the Pacewise option wheel (5-minute steps up to 16 hours), like a time habit: more than
+ * planned (planned 1 h, worked 2 h) or less (planned 1 h, stopped after 30 min). Saved when the popup closes, only if moved.
+ */
+export function SpentWheel({ title, value, planned, onSave, onClose }: {
+  title: string; value: number; planned: number | null; onSave: (minutes: number) => Promise<void>; onClose: () => void;
+}) {
+  const start = value > 0 ? value : (planned ?? 30);
+  const [picked, setPicked] = useState(start);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const values = useMemo(() => {
+    const list: number[] = [];
+    for (let v = 0; v <= 16 * 60; v += 5) list.push(v);
+    if (!list.includes(start)) list.push(start);
+    return list.sort((a, b) => a - b);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- fixed while open, so the rows never shift under the wheel
+  /** Saved only if the wheel was moved to a new value: just looking changes nothing. */
+  const moved = useRef(false);
+  const close = async () => {
+    if (busy) return;
+    if (!moved.current || picked === value) { onClose(); return; }
+    setBusy(true);
+    setError(null);
+    try { await onSave(picked); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Could not save the time."); setBusy(false); }
+  };
+  return (
+    <ClockPopup title={title} onClose={() => void close()}>
+      <p className="-mt-2 text-sm text-ink-muted">
+        Time spent today{planned ? ` · planned ${duration(planned)}` : ""}. Scroll or drag to set it; tick the task to finish it.
+      </p>
+      <div className="relative h-64">
+        <span className="pointer-events-none absolute inset-x-0 top-1/2 h-12 -translate-y-1/2 border-y border-overlay/15 bg-overlay/[0.04]" aria-hidden />
+        <OptionWheel
+          items={values.map((v) => (v === 0 ? "0 min" : duration(v)))}
+          defaultSelected={Math.max(0, values.indexOf(start))}
+          textColor="rgb(var(--ink-faint))"
+          activeColor="rgb(var(--ink))"
+          side="left"
+          fontSize={1.75}
+          spacing={1.6}
+          curve={1}
+          tilt={8}
+          blur={1.5}
+          fade={0.28}
+          smoothing={160}
+          inset={24}
+          loop={false}
+          draggable
+          onChange={(i) => { moved.current = true; setPicked(values[i]); }}
+        />
+      </div>
+      {(busy || error) && <p className={cn("text-sm", error ? "text-accent-extreme" : "text-ink-muted")} role={error ? "alert" : undefined}>{error ?? "Saving…"}</p>}
+    </ClockPopup>
+  );
+}

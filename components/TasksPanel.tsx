@@ -6,9 +6,9 @@ import { TaskHabits } from "@/components/TaskHabits";
 import { TaskOverview } from "@/components/TaskOverview";
 import { weekday } from "@/lib/repeat";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { BarChart3, CalendarDays, Check, Clock, Lock, MoreHorizontal, Pencil, Plus, Timer, Trash2 } from "lucide-react";
+import { BarChart3, CalendarDays, Check, Clock, Lock, MoreHorizontal, NotebookPen, Pencil, Plus, Timer, Trash2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, Pager } from "@/components/ui";
-import { EditTaskDialog, LogTimeDialog } from "@/components/TaskDialogs";
+import { EditTaskDialog, LogTimeDialog, NotesPopup, SpentWheel } from "@/components/TaskDialogs";
 import { lateFinishAllowed, lockedProblem } from "@/lib/rules";
 import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/days";
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
@@ -29,6 +29,28 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   const [filter, setFilter] = useState<Filter>("open");
   const [editing, setEditing] = useState<Task | null>(null);
   const [logging, setLogging] = useState<Task | null>(null);
+  /** Notes open for this task (the same popup as the option wheel). */
+  const [notesFor, setNotesFor] = useState<Task | null>(null);
+  /** Time spent today on the option wheel: the task and what is logged today so far. */
+  const [spentFor, setSpentFor] = useState<{ task: Task; today: number } | null>(null);
+  async function openSpent(t: Task) {
+    try {
+      const day = today();
+      const logged = (await todoApi.logs(day, day)).filter((l) => l.taskId === t.id).reduce((a, l) => a + l.minutes, 0);
+      setSpentFor({ task: t, today: logged });
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load the time spent."); }
+  }
+  /** Sets today's time on a task to `minutes`: logs the extra, or replaces today's logs when it is less. */
+  async function saveSpent(t: Task, before: number, minutes: number) {
+    const day = today();
+    if (minutes > before) await todoApi.logWork(t.id, day, minutes - before, "");
+    else {
+      for (const l of (await todoApi.logs(day, day)).filter((x) => x.taskId === t.id)) await todoApi.removeLog(l.id);
+      if (minutes > 0) await todoApi.logWork(t.id, day, minutes, "");
+    }
+    replace({ ...t, loggedMinutes: Math.max(0, (t.loggedMinutes ?? 0) - before + minutes) });
+    onChanged();
+  }
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [planning, setPlanning] = useState(false);
   const [overview, setOverview] = useState(false);
@@ -204,7 +226,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           </h2>
           <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
             {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
-              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)} />
+              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
+                onNotes={() => setNotesFor(t)} onSpent={() => void openSpent(t)} />
             ))}
           </ul>
           {g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.key, g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={(n) => setPages((cur) => ({ ...cur, [g.key]: n }))} /></div>}
@@ -218,6 +241,14 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       <AddButton onClick={() => setPlanning(true)} />
       {planning && <TaskPlanner neet={neet} contests={contestToggle || undefined} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
 
+      {notesFor && (
+        <NotesPopup title={`Notes · ${notesFor.title}`} value={notesFor.notes ?? ""} onClose={() => setNotesFor(null)}
+          onSave={async (notes) => { replace(await todoApi.update(notesFor.id, { notes })); onChanged(); }} />
+      )}
+      {spentFor && (
+        <SpentWheel title={spentFor.task.title} value={spentFor.today} planned={planned(spentFor.task)} onClose={() => setSpentFor(null)}
+          onSave={(m) => saveSpent(spentFor.task, spentFor.today, m)} />
+      )}
       {editing && <EditTaskDialog task={editing} onClose={() => setEditing(null)} onSaved={(t) => { replace(t); onChanged(); }} />}
       {logging && (
         <LogTimeDialog task={logging} onClose={() => setLogging(null)} onLogged={(m) => { replace({ ...logging, loggedMinutes: (logging.loggedMinutes ?? 0) + m }); onChanged(); }} />
@@ -240,7 +271,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   );
 }
 
-function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDelete }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void }) {
+function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDelete, onNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onSpent: () => void }) {
   const done = t.status === "done" || celebrating;
   /** Past days are read-only: no ticking, logging, editing or deleting. */
   const locked = lockedProblem(t, today());
@@ -264,12 +295,13 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
           {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
             <Badge tone={PRIORITY_TONE[t.priority]} className="rounded-full">{t.priority}</Badge>
-            {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
+            {locked ? (t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>
+              : <SpentChip task={t} onClick={onSpent} />}
             {done && t.completedDay && <span>finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
             {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
           </div>
         </div>
-        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} />}
+        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} />}
       </div>
 
       <div className="hidden items-start gap-4 px-4 py-4 sm:px-5 md:flex">
@@ -283,18 +315,32 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
           <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
           <span>{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</span>
-          {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
+          {locked ? (t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>
+            : <SpentChip task={t} onClick={onSpent} />}
           {done && t.completedDay && <span>· finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
           {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
         </div>
       </div>
       {!locked && <div className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
+        <Button size="sm" variant="ghost" onClick={onNotes} aria-label="Notes" title="Notes"><NotebookPen className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>
       </div>}
       </div>
     </li>
+  );
+}
+
+/** Time spent on a task (and its plan): tap to set today's time on the option wheel. */
+function SpentChip({ task: t, onClick }: { task: Task; onClick: () => void }) {
+  const spent = t.loggedMinutes ?? 0;
+  const plan = planned(t);
+  return (
+    <button type="button" onClick={onClick} aria-label={`Time spent: ${duration(spent)}${plan ? ` of ${duration(plan)} planned` : ""}. Set on the wheel`} title="Set the time spent"
+      className={cn("inline-flex items-center gap-1 rounded-full bg-overlay/[0.06] px-2 py-0.5 tabular-nums transition-colors active:bg-overlay/[0.12]", spent > 0 ? "text-ink-muted" : "text-ink-faint")}>
+      <Clock className="h-3 w-3" aria-hidden />{spent > 0 ? duration(spent) : "0 min"}{plan ? ` / ${duration(plan)}` : ""}
+    </button>
   );
 }
 
@@ -348,8 +394,8 @@ function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: Cale
   );
 }
 
-/** Phones: the ⋯ on a task card, with Log time, Edit and Delete. */
-function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () => void; onDelete: () => void }) {
+/** Phones: the ⋯ on a task card, with Notes, Log time, Edit and Delete. */
+function MoreMenu({ onLog, onEdit, onDelete, onNotes }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -361,8 +407,8 @@ function MoreMenu({ onLog, onEdit, onDelete }: { onLog: () => void; onEdit: () =
       {open && (
         <DropdownMenu soft anchor={trigger} label="Task actions" value="" minWidth={200}
           ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
-          groups={[{ title: "", items: [{ id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
-          onSelect={(id) => (id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
+          groups={[{ title: "", items: [{ id: "notes", label: "Notes", icon: NotebookPen }, { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
+          onSelect={(id) => (id === "notes" ? onNotes() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}
     </>
   );

@@ -24,6 +24,8 @@ export interface Habit {
   /** 0 = Monday … 6 = Sunday. */
   days: number[];
   cue: string;
+  /** The person's own notes on it (how to beat it, what works); older servers leave it out. */
+  notes?: string;
   /** Optional time of day ("HH:MM"); null / missing = any time. */
   time?: string | null;
   startDay: string;
@@ -95,7 +97,7 @@ const enc = encodeURIComponent;
 export const habitApi = {
   list: () => api<Habit[]>("/todo/habits"),
   create: (input: HabitInput) => api<Habit>("/todo/habits", { method: "POST", body: { ...input, ...stamp() } }),
-  update: (id: string, patch: Partial<Omit<HabitInput, "kind">> & { archived?: boolean }) => api<Habit>(`/todo/habits/${enc(id)}`, { method: "PATCH", body: patch }),
+  update: (id: string, patch: Partial<Omit<HabitInput, "kind">> & { archived?: boolean; notes?: string }) => api<Habit>(`/todo/habits/${enc(id)}`, { method: "PATCH", body: patch }),
   remove: (id: string) => api<void>(`/todo/habits/${enc(id)}`, { method: "DELETE" }),
   entries: (from: string, to: string) => api<HabitEntry[]>("/todo/habits/entries", { query: { from, to } }),
   /** Returns null when a count / time of 0 removed the entry. */

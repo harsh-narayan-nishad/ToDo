@@ -262,10 +262,12 @@ export function TodoApp() {
         <nav aria-label="Sections" data-tour="tabs" className="pw-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {/* Tasks, Habits, Calendar, Profile; the Tour guide is in More. */}
           {(["tasks", "habits", "calendar", "profile"] as Tab[]).map((id) => TABS.find((t) => t.id === id)!).map(({ id, label }) => (
-            <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
-              className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tab === id ? "#3478F6" : "#8C8F98" }}>
-              <TabIcon name={(id === "docs" ? "tour" : id) as TabIconName} active={tab === id} />
-              {label}
+            <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined} aria-label={label} title={label}
+              className="flex flex-1 items-center justify-center py-2" style={{ color: tab === id ? "#3478F6" : "#8C8F98" }}>
+              {/* Icons only: the open tab sits on a soft blue pill, and the icon springs a little when pressed. */}
+              <span className={cn("grid h-10 w-14 place-items-center rounded-full transition-[background-color,transform] duration-200 active:scale-90", tab === id && "bg-[#3478F6]/[0.12]")}>
+                <TabIcon name={(id === "docs" ? "tour" : id) as TabIconName} active={tab === id} className="h-[27px] w-[27px]" />
+              </span>
             </button>
           ))}
           <HamburgerMenu tab tabActive={tab === "history" || tab === "docs"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}

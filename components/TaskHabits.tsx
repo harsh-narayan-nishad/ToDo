@@ -147,6 +147,7 @@ export function TaskHabits({ refreshKey, onlyDone, hideDone = false, onChanged, 
         )}
         {shown.map((h) => (
           <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} card onDelete={() => setDeleting(h)}
+            onNotes={async (notes) => { const saved = await habitApi.update(h.id, { notes }); setHabits((hs) => hs.map((x) => (x.id === h.id ? { ...x, ...saved } : x))); }}
             className={cn(hideDone && leaving.has(h.id) && "task-done-out")} />
         ))}
       </ul>

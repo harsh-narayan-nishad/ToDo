@@ -90,9 +90,11 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
     if (!keepFull || full) return;
     // Not from inside the menu, so turning it off there is not undone by the same tap.
     const back = (e: Event) => { if (isPhone() && !(e.target instanceof Element && e.target.closest('[role="dialog"][aria-label="Menu"]'))) enterFull(); };
-    document.addEventListener("touchend", back, true);
-    document.addEventListener("click", back, true);
-    return () => { document.removeEventListener("touchend", back, true); document.removeEventListener("click", back, true); };
+    // Any touch, tap, key or scroll: a tab in the bar, the bell, a card, or a swipe up and down the list. (A browser
+    // allows full screen only right after the person's own touch or key, so a scroll gets it from the swipe's touch.)
+    const events = ["pointerdown", "pointerup", "touchstart", "touchend", "click", "keydown", "scroll", "wheel"] as const;
+    events.forEach((t) => document.addEventListener(t, back, { capture: true, passive: true }));
+    return () => events.forEach((t) => document.removeEventListener(t, back, { capture: true }));
   }, [keepFull, full]);
   const toggleFull = () => {
     if (isPhone()) {
@@ -120,10 +122,11 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
   return (
     <>
       {tab ? (
-        <button type="button" onClick={() => setOpen(true)} aria-label="More" aria-haspopup="dialog"
-          className="flex flex-1 flex-col items-center gap-[3px] pb-1 pt-1.5 text-[10px] font-medium tracking-[0.01em]" style={{ color: tabActive || open ? "#3478F6" : "#8C8F98" }}>
-          <TabIcon name="more" active={tabActive || open} />
-          More
+        <button type="button" onClick={() => setOpen(true)} aria-label="More" title="More" aria-haspopup="dialog"
+          className="flex flex-1 items-center justify-center py-2" style={{ color: tabActive || open ? "#3478F6" : "#8C8F98" }}>
+          <span className={cn("grid h-10 w-14 place-items-center rounded-full transition-[background-color,transform] duration-200 active:scale-90", (tabActive || open) && "bg-[#3478F6]/[0.12]")}>
+            <TabIcon name="more" active={tabActive || open} className="h-[27px] w-[27px]" />
+          </span>
         </button>
       ) : (
       <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" aria-haspopup="dialog"

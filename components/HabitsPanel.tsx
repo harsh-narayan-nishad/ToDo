@@ -1,13 +1,13 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BedDouble, Check, ChevronDown, FileUp, Flame, Minus, Moon, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
+import { BedDouble, Check, ChevronDown, FileUp, Flame, Minus, Moon, MoreHorizontal, NotebookPen, Plus, Sunrise, Trash2, Undo2 } from "lucide-react";
 import { Badge, Card, ConfirmDialog, Empty, Stat } from "@/components/ui";
 import { GlassButton } from "@/components/GlassButton";
 import LiquidGlass from "@/components/LiquidGlass";
 import { PanelLoader } from "@/components/WheelSpinner";
 import OptionWheel from "@/components/OptionWheel";
-import { ClockPopup } from "@/components/TaskDialogs";
-import { QuietSelect, YearSelect, yearOptions, type DropdownGroup } from "@/components/GlassDropdown";
+import { ClockPopup, NotesPopup } from "@/components/TaskDialogs";
+import { DropdownMenu, QuietSelect, YearSelect, yearOptions, type DropdownGroup } from "@/components/GlassDropdown";
 import { HabitDetail, HabitEditor, HabitGrid, habitDayLine, Segmented, SleepDialog, levelOf } from "@/components/HabitDialogs";
 import { ApiError } from "@/lib/api";
 import { readHabitCsv } from "@/lib/habitCsv";
@@ -384,12 +384,14 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 const sleepPreset = (): Partial<HabitInput> => TEMPLATES.find((t) => t.kind === "sleep")!;
 
 /** One habit for today: its control (tick, or − amount +), name and plan, streak, and the last 7 days. */
-export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete, className }: {
+export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete, onNotes, className }: {
   habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onSkip: (on: boolean) => void; onOpen: () => void;
   /** Phones: a rounded card with a round check, like a task card (used in the Tasks list). */
   card?: boolean;
-  /** When given: a round Delete button next to Skip (the caller asks to confirm). */
+  /** When given: Delete in the row's ⋯ menu (the caller asks to confirm). */
   onDelete?: () => void;
+  /** When given: Notes in the row's ⋯ menu, your own notes on this habit (saved through this). */
+  onNotes?: (notes: string) => Promise<void>;
   /** Extra classes on the row (e.g. the slide-away when it moves to Done). */
   className?: string;
 }) {
@@ -401,6 +403,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const amount = h.kind === "count" || h.kind === "duration";
   const step = h.kind === "duration" ? (h.target >= 60 ? 15 : 5) : Math.max(1, Math.round(goal(h) / 10));
   const [wheel, setWheel] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
@@ -445,7 +448,7 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
       )}
       {wheel && <AmountWheel habit={h} value={e?.value ?? 0} step={step} onChange={onAmount} onClose={() => setWheel(false)} />}
       {/* Skip today (or undo the skip) in a round liquid glass button. */}
-      {(skipped || onDelete) && (
+      {(skipped || onDelete || onNotes) && (
         <div className="order-2 ml-auto flex shrink-0 items-center gap-2 self-start sm:order-none sm:ml-0 sm:self-center">
           {/* The Skip button is gone; a day skipped before can still be un-skipped. */}
           {skipped && (
@@ -453,14 +456,10 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
               <Undo2 className="h-4 w-4" />
             </GlassRound>
           )}
-          {onDelete && (
-            <button type="button" onClick={onDelete} aria-label={`Delete ${h.name}`} title="Delete this habit"
-              className="pw-circle-btn grid h-9 w-9 shrink-0 place-items-center rounded-full active:scale-95">
-              <Trash2 className="h-4 w-4 text-[#F2453D]" />
-            </button>
-          )}
+          {(onDelete || onNotes) && <HabitMenu name={h.name} onNotes={onNotes ? () => setNotesOpen(true) : undefined} onDelete={onDelete} />}
         </div>
       )}
+      {notesOpen && onNotes && <NotesPopup title={`Notes · ${h.name}`} value={h.notes ?? ""} onSave={onNotes} onClose={() => setNotesOpen(false)} />}
     </li>
   );
 }
@@ -505,6 +504,30 @@ function AmountWheel({ habit: h, value, step, onChange, onClose }: { habit: Habi
         />
       </div>
     </ClockPopup>
+  );
+}
+
+/** The ⋯ on a habit, like a task's: Notes and Delete. */
+function HabitMenu({ name, onNotes, onDelete }: { name: string; onNotes?: () => void; onDelete?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const items = [
+    ...(onNotes ? [{ id: "notes", label: "Notes", icon: NotebookPen }] : []),
+    ...(onDelete ? [{ id: "delete", label: "Delete", icon: Trash2, danger: true }] : []),
+  ];
+  return (
+    <>
+      <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${name}: actions`}
+        className="pw-circle-btn grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink active:scale-95">
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <DropdownMenu soft anchor={trigger} label="Habit actions" value="" minWidth={200}
+          ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
+          groups={[{ title: "", items }]}
+          onSelect={(id) => (id === "notes" ? onNotes?.() : onDelete?.())} />
+      )}
+    </>
   );
 }
 
