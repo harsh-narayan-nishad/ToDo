@@ -13,8 +13,8 @@
 const STORE = "pacewise-todo-cache-v1";
 export const CACHE_MS = 6 * 60 * 60 * 1000;
 
-/** Reads that are cached: tasks, habits and check-ins, profile, history, entries and the calendar. */
-const CACHEABLE = [/^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
+/** Reads that are cached: the signed-in account, tasks, habits and check-ins, profile, history, entries and the calendar. */
+const CACHEABLE = [/^\/auth\/me$/, /^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
 export const cacheable = (path: string) => CACHEABLE.some((r) => r.test(path));
 
 interface Slot { at: number; day: string; data: string }
