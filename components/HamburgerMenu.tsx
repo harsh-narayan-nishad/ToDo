@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, Compass, History, Menu, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
+import { Check, ChevronRight, Compass, History, Maximize, Menu, Minimize, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
 import type { User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TabIcon } from "@/components/TabIcons";
@@ -54,6 +54,28 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
   const [closing, setClosing] = useState(false);
   const [section, setSection] = useState<"theme" | null>(null);
   useEffect(() => setMounted(true), []);
+
+  /** Full screen: the whole app, where the browser allows it (not iPhone Safari, so the row is hidden there). */
+  type FsDoc = Document & { webkitFullscreenEnabled?: boolean; webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> };
+  const [canFull, setCanFull] = useState(false);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const d = document as FsDoc;
+    setCanFull(!!(d.fullscreenEnabled || d.webkitFullscreenEnabled));
+    const sync = () => setFull(!!(d.fullscreenElement || d.webkitFullscreenElement));
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => { document.removeEventListener("fullscreenchange", sync); document.removeEventListener("webkitfullscreenchange", sync); };
+  }, []);
+  const toggleFull = () => {
+    const d = document as FsDoc;
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+    try {
+      if (d.fullscreenElement || d.webkitFullscreenElement) void (d.exitFullscreen ? d.exitFullscreen() : d.webkitExitFullscreen?.())?.catch(() => {});
+      else void (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.())?.catch(() => {});
+    } catch { /* the browser said no */ }
+  };
 
   /** Slide out, then unmount. */
   const close = () => {
@@ -120,6 +142,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
                 {onTour && <Row icon={Compass} tint="#30C26A" label="Tour" value="Guide" onClick={() => { close(); onTour(); }} />}
                 {/* History lives here instead of in the section tabs. */}
                 <Row icon={History} tint="#F59A23" label="History" onClick={() => { onHistory(); close(); }} />
+                {canFull && <Row icon={full ? Minimize : Maximize} tint="#3478F6" label="Full screen" value={full ? "On" : "Off"} mark="none" onClick={() => { toggleFull(); close(); }} />}
                 <Row icon={Palette} tint="#6A5AE0" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}
                   onClick={() => setSection(section === "theme" ? null : "theme")} />
                 {section === "theme" && ([[true, "Light", Sun], [false, "Dark", Moon]] as const).map(([isLight, label, Icon], i) => (
