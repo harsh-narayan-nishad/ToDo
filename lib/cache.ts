@@ -13,8 +13,11 @@
 const STORE = "pacewise-todo-cache-v1";
 export const CACHE_MS = 6 * 60 * 60 * 1000;
 
-/** Reads that are cached: the signed-in account, tasks, habits and check-ins, profile, history, entries and the calendar. */
-const CACHEABLE = [/^\/auth\/me$/, /^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
+/**
+ * Reads that are cached: the signed-in account, tasks, habits and check-ins, profile, history, entries, the calendar,
+ * the gold-coin wallet, and the contest sync (which the server also runs when it is read: so it runs at most every 6 hours).
+ */
+const CACHEABLE = [/^\/auth\/me$/, /^\/todo\/coins$/, /^\/todo\/contests$/, /^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
 export const cacheable = (path: string) => CACHEABLE.some((r) => r.test(path));
 
 interface Slot { at: number; day: string; data: string }
@@ -79,6 +82,13 @@ function edit<T>(test: (key: string) => boolean, fn: (list: T[], key: string) =>
   persist();
 }
 
+/** Puts the server's reply in place of every cached copy of a read (keeping how long the copy is trusted). */
+function replace(test: (key: string) => boolean, data: unknown) {
+  const s = store();
+  for (const [k, slot] of Object.entries(s)) if (test(k)) s[k] = { ...slot, data: JSON.stringify(data) };
+  persist();
+}
+
 type WithId = { id: string };
 const upsert = <T extends WithId>(list: T[], item: T, front = false) =>
   list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : front ? [item, ...list] : [...list, item];
@@ -109,6 +119,8 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
       edit<WithId & { loggedMinutes?: number }>(tasks, (l) => l.map((x) => (x.id === id ? { ...x, loggedMinutes: (x.loggedMinutes ?? 0) + minutes } : x)));
     } else drop(tasks);
     drop((k) => derived(k) || pathOf(k) === "/calendar/events");
+    // Finishing or reopening a task earns or takes back gold coins: the wallet is read again next time it is shown.
+    if (b.status !== undefined) drop((k) => pathOf(k) === "/todo/coins");
     return;
   }
 
@@ -149,10 +161,25 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
     return;
   }
 
-  // Gold coins (the wallet is never cached): buying Premium touches nothing else.
-  if (path.startsWith("/todo/coins")) return;
+  // Gold coins: buying Premium answers with the new wallet, which replaces the cached one (nothing else changes).
+  if (path.startsWith("/todo/coins")) {
+    if (result) replace((k) => pathOf(k) === "/todo/coins", result); else drop((k) => pathOf(k) === "/todo/coins");
+    return;
+  }
 
   // Logged time removed, or anything else: whatever it touches is read again next time.
   if (path.startsWith("/todo/logs")) { drop((k) => derived(k) || pathOf(k) === "/todo/tasks" || pathOf(k) === "/calendar/events"); return; }
   if (path.startsWith("/todo") || path.startsWith("/calendar")) drop((k) => k.startsWith("/todo") || k.startsWith("/calendar"));
+}
+
+/**
+ * After a read fetched from the server: a read that also changed something there makes the cached copies it touched
+ * stale. Reading contests adds (or removes) contest tasks, so when it did, the task list and what depends on it are read again.
+ * Returns what to keep in the cache: a contests copy says "nothing added", since those tasks were handled this once.
+ */
+export function cacheAfterRead<T>(path: string, data: T): T {
+  if (path !== "/todo/contests") return data;
+  const r = (data ?? {}) as { added?: number; removed?: number };
+  if ((r.added ?? 0) > 0 || (r.removed ?? 0) > 0) drop((k) => pathOf(k) === "/todo/tasks" || derived(k) || pathOf(k) === "/calendar/events");
+  return { ...r, added: 0, removed: 0 } as T;
 }

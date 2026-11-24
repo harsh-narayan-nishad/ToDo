@@ -1049,3 +1049,10 @@
 .pw-calendar .rbc-time-view .rbc-time-gutter,
 .pw-calendar .rbc-label { text-align: right; }
 .pw-calendar .pw-year__day.is-today { background: #ef4444; color: #fff; }
+
+/* Phones: seven narrow week columns, so the day numbers sit centred with little padding (they were cut off). */
+@media (max-width: 639px) {
+  /* "22 Sun" wraps onto two lines (22 over Sun) instead of being cut off. */
+  .pw-calendar .rbc-time-view .rbc-header { padding: 0.45rem 0.1rem; text-align: center; font-size: 0.78rem; line-height: 1.2; white-space: normal; overflow: visible; text-overflow: clip; }
+  .pw-calendar .rbc-time-view .rbc-header .rbc-button-link { padding: 2px 0; white-space: normal; }
+}

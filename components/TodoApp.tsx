@@ -20,6 +20,7 @@ import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
 import { cn } from "@/lib/utils";
 import { isNeetAspirant, isSoftwareEngineer } from "@/lib/neetSyllabus";
+import { isPremium, useWallet } from "@/lib/coins";
 
 type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
@@ -279,7 +280,7 @@ export function TodoApp() {
           <div className="hidden md:block"><Logo /></div>
           {/* Phones: a greeting instead of the logo. */}
           <div className="min-w-0 md:hidden">
-            <p className="truncate text-2xl text-ink">Hello {user.name.trim().split(/\s+/)[0] || user.username},</p>
+            <p className="flex min-w-0 items-center text-2xl text-ink"><span className="truncate">Hello {user.name.trim().split(/\s+/)[0] || user.username},</span><PremiumCrown version={version} /></p>
             <p className="text-sm text-ink-muted">{dueNow === null ? "Here is your day" : dueNow > 0 ? "You have work today" : "Nothing due today"}</p>
           </div>
           {/* The Pacewise-style hamburger menu: History, theme, and the account with Log out. */}
@@ -332,5 +333,33 @@ export function TodoApp() {
         {tab === "docs" && <DocsPanel onTour={() => setTouring(true)} />}
       </main>
     </div>
+  );
+}
+
+/**
+ * Premium members: a refined gold crown beside the name in the greeting, drawn to match the gold coin (a warm metal
+ * gradient with a fine darker edge), sized to the text and set on its cap height. Nothing for everyone else.
+ */
+function PremiumCrown({ version }: { version: number }) {
+  const { wallet } = useWallet(version);
+  if (!isPremium(wallet)) return null;
+  return (
+    <span className="ml-2 inline-flex shrink-0 -translate-y-[0.12em] items-center" title="Premium member" role="img" aria-label="Premium member">
+      <svg viewBox="0 0 24 20" className="h-[0.72em] w-auto drop-shadow-[0_1px_1.5px_rgba(160,105,0,0.35)]" aria-hidden>
+        <defs>
+          <linearGradient id="pw-crown-gold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#FFE58A" />
+            <stop offset="0.55" stopColor="#F2BC2E" />
+            <stop offset="1" stopColor="#C98A06" />
+          </linearGradient>
+        </defs>
+        {/* the crown: five points over a band, three jewels on the points */}
+        <path d="M2.2 6.2l4.9 4.3L12 2.6l4.9 7.9 4.9-4.3-1.9 10.3H4.1z" fill="url(#pw-crown-gold)" stroke="#B07A08" strokeWidth="1" strokeLinejoin="round" />
+        <rect x="4" y="16.9" width="16" height="2.4" rx="1.1" fill="url(#pw-crown-gold)" stroke="#B07A08" strokeWidth="0.9" />
+        <circle cx="12" cy="2.6" r="1.6" fill="#FFF3C4" stroke="#B07A08" strokeWidth="0.8" />
+        <circle cx="2.2" cy="6.2" r="1.35" fill="#FFF3C4" stroke="#B07A08" strokeWidth="0.8" />
+        <circle cx="21.8" cy="6.2" r="1.35" fill="#FFF3C4" stroke="#B07A08" strokeWidth="0.8" />
+      </svg>
+    </span>
   );
 }

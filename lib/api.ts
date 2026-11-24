@@ -1,5 +1,5 @@
 import { API_BASE, fallBackToOnline, whenBackendChosen } from "@/lib/backend";
-import { cacheAfterWrite, cacheClear, cacheGet, cacheKey, cachePut, cacheable } from "@/lib/cache";
+import { cacheAfterRead, cacheAfterWrite, cacheClear, cacheGet, cacheKey, cachePut, cacheable } from "@/lib/cache";
 /** Backend address INCLUDING /api/v1: the local backend when it runs, otherwise the online one (see lib/backend.ts). */
 export { API_BASE };
 /** The main Pacewise app, for "Open calendar" and "Create an account". */
@@ -62,7 +62,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
     // The same read asked for twice at once (two panels) goes out once.
     const running = inflight.get(key) as Promise<T> | undefined;
     if (running) return running;
-    const p = request<T>(path, opts).then((data) => { cachePut(key, data); return data; }).finally(() => inflight.delete(key));
+    const p = request<T>(path, opts).then((data) => { cachePut(key, cacheAfterRead(path, data)); return data; }).finally(() => inflight.delete(key));
     inflight.set(key, p);
     return p;
   }

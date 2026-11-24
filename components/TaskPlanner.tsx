@@ -235,8 +235,8 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
 
               {(problem || error) && <p className="text-sm text-accent-extreme" role="alert">{error ?? problem}</p>}
               <div className="sticky -bottom-6 -mx-6 -mb-6 flex justify-end gap-2 bg-gradient-to-t from-canvas-raised via-canvas-raised/90 to-transparent px-6 pb-6 pt-8 sm:-bottom-8 sm:-mx-8 sm:-mb-8 sm:px-8 sm:pb-8">
-                <GlassButton type="button" onClick={onClose} disabled={busy}>Cancel</GlassButton>
-                <GlassButton type="button" data-tour="planner-add" onClick={() => void submit()} disabled={busy || !!problem} strong>
+                <GlassButton type="button" onClick={onClose} disabled={busy} className="whitespace-nowrap max-sm:flex-1 max-sm:px-4">Cancel</GlassButton>
+                <GlassButton type="button" data-tour="planner-add" onClick={() => void submit()} disabled={busy || !!problem} strong className="whitespace-nowrap max-sm:flex-1 max-sm:px-4">
                   {busy ? <ButtonWheel /> : <Check className="h-4 w-4" />}{busy ? "Adding…" : `Add ${total} task${total === 1 ? "" : "s"}`}
                 </GlassButton>
               </div>

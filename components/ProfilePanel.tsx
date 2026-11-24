@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { Crown, Flame } from "lucide-react";
+import { ChevronDown, Crown, Flame } from "lucide-react";
 import { Card, Stat } from "@/components/ui";
 import { GoldCoin } from "@/components/GoldCoin";
 import { ButtonWheel } from "@/components/WheelSpinner";
@@ -23,7 +23,8 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
   }, [version]);
 
   if (error) return <p className="text-sm text-accent-extreme" role="alert">{error}</p>;
-  if (!data) return <PanelLoader label="Loading your profile" />;
+  // The profile appears in one go, with its gold coins: never the stats first and the coins a moment later.
+  if (!data || (!coins.wallet && !coins.error)) return <PanelLoader label="Loading your profile" />;
   const { totals: t } = data;
 
   return (
@@ -157,7 +158,10 @@ function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: stri
         </div>
       </div>
       <div className="mr-[4.25rem] mt-2 flex">
-        {days.map((d) => <span key={d.day} className={cn("flex-1 text-center text-xs", isToday(d) ? "font-medium text-ink" : "text-ink-muted")}>{label(d)}</span>)}
+        {days.map((d) => <span key={d.day} className={cn("min-w-0 flex-1 truncate text-center text-[10px] sm:text-xs", isToday(d) ? "font-semibold text-ink" : "text-ink-muted")}>
+          {/* phones: the weekday (today in bold); wider screens: "Today" */}
+          <span className="sm:hidden">{WEEKDAY[new Date(d.day + "T12:00").getDay()]}</span><span className="hidden sm:inline">{label(d)}</span>
+        </span>)}
       </div>
 
       <div className="mt-5 grid grid-cols-3 gap-3 border-t border-overlay/10 pt-4 text-sm">
@@ -196,12 +200,13 @@ const TXN_LABEL: Record<CoinTxn["kind"], string> = { welcome: "Welcome bonus", e
  */
 function CoinsCard({ wallet: w, onWallet }: { wallet: Wallet; onWallet: (w: Wallet) => void }) {
   const [confirm, setConfirm] = useState(false);
+  /** Compact (balance and Premium) until More is tapped. */
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const r = w.rules;
   const premium = isPremium(w);
   const short = Math.max(0, r.premiumPrice - w.balance);
-  const until = w.premiumUntil ? new Date(w.premiumUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
 
   async function buy() {
     setBusy(true);
@@ -215,12 +220,18 @@ function CoinsCard({ wallet: w, onWallet }: { wallet: Wallet; onWallet: (w: Wall
         <div>
           <h2 className="text-sm uppercase tracking-wide text-ink-muted">Gold coins</h2>
           <p className="mt-1 flex items-center gap-2 font-display text-4xl tabular-nums text-ink"><GoldCoin size={30} />{w.balance.toLocaleString()}</p>
-          <p className="mt-1 text-xs text-ink-faint">{r.perTask} coins for every finished task · up to {r.dailyCap} a day · reopening a task takes its coins back</p>
         </div>
-        {premium ? (
-          <div className="text-right"><PremiumBadge /><p className="mt-1.5 text-xs text-ink-muted">until {until}</p></div>
-        ) : null}
+        <div className="flex flex-col items-end gap-2">
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="coins-more"
+            className="inline-flex h-9 items-center gap-1 rounded-full bg-overlay/[0.07] pl-3.5 pr-2.5 text-[13px] font-medium text-ink transition-colors active:bg-overlay/[0.12]">
+            {open ? "Less" : "More"}<ChevronDown className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")} aria-hidden />
+          </button>
+        </div>
       </div>
+
+      {open && (
+      <div id="coins-more" className="fade-in flex flex-col gap-5">
+      <p className="-mt-3 text-xs text-ink-faint">{r.perTask} coins for every finished task · up to {r.dailyCap} a day · reopening a task takes its coins back</p>
 
       {/* Today's coins against the daily limit. */}
       <div>
@@ -271,6 +282,8 @@ function CoinsCard({ wallet: w, onWallet }: { wallet: Wallet; onWallet: (w: Wall
             ))}
           </ul>
         </div>
+      )}
+      </div>
       )}
     </Card>
   );

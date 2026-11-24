@@ -148,21 +148,21 @@ export function CalendarPanel({ userId, onChanged }: { userId: string | null; on
     <>
       <Card className="pw-card rounded-[32px] bg-canvas-raised p-4 sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
-          <button type="button" aria-label="New task" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
+          <button type="button" aria-label="New task" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); openNew(s, new Date(s.getTime() + 60 * 60 * 1000)); }} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]">
             <Plus className="h-4 w-4" />
           </button>
-          <div role="tablist" aria-label="Calendar view" className="flex rounded-full bg-overlay/[0.07] p-1">
+          <div role="tablist" aria-label="Calendar view" className="flex min-w-0 flex-1 rounded-full bg-overlay/[0.07] p-1 sm:flex-none">
             {VIEWS.map(({ id, label }) => (
-              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => { setView(id); setDate(new Date()); /* each view opens on the current day / week / month / year */ }} className={`rounded-full px-3.5 py-1 text-sm font-medium transition-colors ${view === id ? "bg-overlay/[0.14] text-ink" : "text-ink-muted hover:text-ink"}`}>{label}</button>
+              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => { setView(id); setDate(new Date()); /* each view opens on the current day / week / month / year */ }} className={`min-w-0 flex-1 rounded-full px-1.5 py-1 text-[13px] font-medium transition-colors sm:flex-none sm:px-3.5 sm:text-sm ${view === id ? "bg-overlay/[0.14] text-ink" : "text-ink-muted hover:text-ink"}`}>{label}</button>
             ))}
           </div>
-          <span className="w-9" aria-hidden />
+          <span className="hidden w-9 sm:block" aria-hidden />
         </div>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <h3 className="font-display text-3xl tracking-[-0.02em] text-ink sm:text-4xl">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <h3 className="min-w-0 font-display text-3xl tracking-[-0.02em] text-ink sm:text-4xl">
             <span className="font-semibold">{titleParts.bold}</span>{titleParts.light && <span className="font-light text-ink-muted"> {titleParts.light}</span>}
           </h3>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <button type="button" aria-label="Previous" onClick={() => go(-1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]"><ChevronLeft className="h-4 w-4" /></button>
             <button type="button" onClick={() => setDate(new Date())} className="h-8 rounded-full bg-overlay/[0.07] px-3.5 text-sm font-medium text-ink transition-colors hover:bg-overlay/[0.12]">Today</button>
             <button type="button" aria-label="Next" onClick={() => go(1)} className="flex h-8 w-8 items-center justify-center rounded-full bg-overlay/[0.07] text-ink transition-colors hover:bg-overlay/[0.12]"><ChevronRight className="h-4 w-4" /></button>
