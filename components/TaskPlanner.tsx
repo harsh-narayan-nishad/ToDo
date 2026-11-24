@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, Check, Plus, X } from "lucide-react";
+import { CalendarRange, Check, ChevronDown, Plus, Repeat2, Target, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
 import { TaskSheet, blankRow, findClashes, type SheetRow } from "@/components/TaskSheet";
@@ -11,7 +11,7 @@ import { titleProblem } from "@/lib/rules";
 import { createBulk, type BulkResult, type Task } from "@/lib/todo";
 import { tourState } from "@/lib/tour";
 import { cn } from "@/lib/utils";
-import { GlassDropdown } from "@/components/GlassDropdown";
+import { DropdownMenu, type DropdownGroup } from "@/components/GlassDropdown";
 import { INTERVALS, MAX_RANGE_DAYS, PATTERNS, planDays, repeatLabel, span, weekday, type Repeat } from "@/lib/repeat";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import { ClockPopup } from "@/components/TaskDialogs";
@@ -175,45 +175,40 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
             <div className="flex flex-col gap-8">
               {/* 1. When */}
               <Section n={1} title="When">
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <div data-tour="range">
-                    <p className={cn(LABEL, "mb-2")}>Range</p>
-                    <GlassDropdown label="Range" value={preset?.label ?? "custom"} display={preset ? `${preset.label} · ${short(from)} – ${short(to)}` : `Custom · ${short(from)} – ${short(to)}`}
+                {/* Range, Repeat and Goal as a row of chips (a quick-add bar): each opens its menu. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span data-tour="range" className="contents">
+                    <ChipSelect icon={CalendarRange} label="Range" value={preset?.label ?? "custom"} display={preset ? `${preset.label} · ${short(from)} – ${short(to)}` : `${short(from)} – ${short(to)}`}
                       groups={[
                         { title: "Quick ranges", items: quick.map((p) => ({ id: p.label, label: p.label, meta: `${short(p.from)} – ${short(p.to)}` })) },
                         { title: "Your own", items: [{ id: "custom", label: "Custom dates", meta: preset ? "pick days" : `${short(from)} – ${short(to)}` }] },
                       ]}
                       onSelect={(id) => { const p = quick.find((q) => q.label === id); if (p) { setFrom(p.from); setTo(p.to); } else setCustomOpen(true); }} />
-                    {customOpen && (
-                      <ClockPopup title="Custom dates" onClose={() => setCustomOpen(false)}>
-                        <div className="grid grid-cols-2 gap-5">
-                          <label className={LABEL}>First day<input type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
-                          <label className={LABEL}>Last day<input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={FIELD} /></label>
-                        </div>
-                        <p className="text-sm text-ink-muted">{to >= from ? `${span(from, to) + 1} day${span(from, to) === 0 ? "" : "s"} · ${longDay(from)}${from !== to ? ` → ${longDay(to)}` : ""}` : "The last day must be on or after the first day."}</p>
-                      </ClockPopup>
-                    )}
-                  </div>
-                  <div data-tour="repeat">
-                    <p className={cn(LABEL, "mb-2")}>Repeat</p>
-                    <GlassDropdown label="Repeat" value={repeat} display={repeatLabel(repeat)}
+                  </span>
+                  <span data-tour="repeat" className="contents">
+                    <ChipSelect icon={Repeat2} label="Repeat" value={repeat} display={repeatLabel(repeat)}
                       groups={[{ title: "Pattern", items: PATTERNS }, { title: "Interval", items: INTERVALS.map((x) => ({ ...x, meta: `${planDays(from, to, x.id, picked).length} days` })) }]}
                       onSelect={(id) => setRepeat(id as Repeat)} />
-                  </div>
-                </div>
-                {/* Optional: the goal (weekly, monthly, quarterly, yearly) every task in this plan counts toward. */}
-                <div>
-                  <p className={cn(LABEL, "mb-2")}>Goal (optional)</p>
-                  <GlassDropdown label="Goal" value={goalId} display={goals.find((g) => g.id === goalId)?.title ?? "No goal"}
+                  </span>
+                  {/* Optional: the goal every task in this plan counts toward. */}
+                  <ChipSelect icon={Target} label="Goal" value={goalId} display={goals.find((g) => g.id === goalId)?.title ?? "No goal"} muted={!goalId}
                     groups={[
                       { title: "", items: [{ id: "", label: "No goal" }] },
                       ...(goals.length ? [{ title: "Your goals", items: goals.map((g) => ({ id: g.id, label: g.title, meta: periodLabel(g.period) })) }] : []),
                       { title: "", items: [{ id: "__new", label: "New goal…", icon: Plus }] },
                     ]}
                     onSelect={(id) => (id === "__new" ? setNewGoal(true) : setGoalId(id))} />
-                  {goals.length === 0 && <p className="mt-2 text-xs text-ink-faint">No goals yet: pick “New goal…” to set a weekly, monthly, quarterly or yearly one.</p>}
-                  {newGoal && <GoalSheet onClose={() => setNewGoal(false)} onSaved={(g) => { setGoals((l) => [...l, g]); setGoalId(g.id); }} />}
                 </div>
+                {customOpen && (
+                  <ClockPopup title="Custom dates" onClose={() => setCustomOpen(false)}>
+                    <div className="grid grid-cols-2 gap-5">
+                      <label className={LABEL}>First day<input type="date" value={from} min={now} onChange={(e) => { if (!e.target.value) return; setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} className={FIELD} /></label>
+                      <label className={LABEL}>Last day<input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className={FIELD} /></label>
+                    </div>
+                    <p className="text-sm text-ink-muted">{to >= from ? `${span(from, to) + 1} day${span(from, to) === 0 ? "" : "s"} · ${longDay(from)}${from !== to ? ` → ${longDay(to)}` : ""}` : "The last day must be on or after the first day."}</p>
+                  </ClockPopup>
+                )}
+                {newGoal && <GoalSheet onClose={() => setNewGoal(false)} onSaved={(g) => { setGoals((l) => [...l, g]); setGoalId(g.id); }} />}
                 {repeat === "custom" && (
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Days of the week">
                     {WEEKDAYS.map((w, i) => (
@@ -334,5 +329,28 @@ function Result({ result, onClose }: { result: BulkResult; onClose: () => void }
       </ul>
       <div className="flex justify-end"><GlassButton type="button" onClick={onClose} strong>Done</GlassButton></div>
     </div>
+  );
+}
+
+/**
+ * A chip that opens a menu, like a quick-add bar's: the planner's liquid glass button made compact (the same glass,
+ * an icon and the value), opening the same menu the full-width dropdowns had.
+ */
+function ChipSelect({ icon: Icon, label, value, display, groups, onSelect, muted = false }: {
+  icon: typeof Plus; label: string; value: string; display: string; groups: DropdownGroup[]; onSelect: (id: string) => void; muted?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={trigger} type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${display}`} title={label}
+        className="glass-fab relative inline-flex h-10 max-w-full items-center gap-2 rounded-full px-4 text-left text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-medium">
+        <span className="glass-clear absolute inset-0" aria-hidden><LiquidGlass width="100%" height="100%" radius={20} blur={4} /></span>
+        <Icon className={cn("relative h-4 w-4 shrink-0", muted ? "text-ink-faint" : "text-ink-muted")} strokeWidth={2} aria-hidden />
+        <span className={cn("relative truncate", muted && "text-ink-muted")}>{display}</span>
+        <ChevronDown className={cn("relative h-4 w-4 shrink-0 text-ink-muted transition-transform duration-200", open && "rotate-180")} aria-hidden />
+      </button>
+      {open && <DropdownMenu anchor={trigger} groups={groups} value={value} onSelect={onSelect} onClose={() => setOpen(false)} label={label} minWidth={260} />}
+    </>
   );
 }
