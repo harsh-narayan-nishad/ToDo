@@ -66,7 +66,8 @@ export function HistoryPanel({ day, setDay, version, onChanged }: { day: string;
             <h2 className="mt-0.5 font-display text-3xl tracking-[-0.03em] text-ink sm:text-4xl">{rest.join(", ")}</h2>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          {/* minmax(0, 1fr) columns: a long title is cut short with "…" instead of widening the page. */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <TaskList title="Finished" tasks={detail.completed} empty="Nothing finished this day." icon={Check} color="#34C759" />
             <TaskList title="Added" tasks={detail.created} empty="No tasks added this day." icon={Plus} color="#8E8E93" />
           </div>

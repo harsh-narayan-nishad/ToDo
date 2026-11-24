@@ -31,7 +31,7 @@ export function LoginCard({ onSignedIn }: { onSignedIn: (u: User) => void }) {
   }
 
   return (
-    <main className="grid h-screen w-full grid-rows-[minmax(0,1fr)] overflow-hidden lg:grid-cols-2">
+    <main className="grid h-screen w-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden lg:grid-cols-2">
       <div className="flex h-full min-h-0 flex-col overflow-y-auto px-6 py-10 sm:px-12 lg:px-[8vw]">
         <div className="my-auto">
           <Logo size="lg" className="mb-8" />
