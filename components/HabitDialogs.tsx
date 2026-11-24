@@ -242,9 +242,9 @@ export function HabitEditor({ habit, preset, habits, onClose, onSave }: {
 }
 
 /** Settings-style rows for the habit editor: a row inside a rounded group, its divider, and a borderless input. */
-const ROW = "flex min-h-[46px] items-center gap-3 px-4";
-const ROW_LINE = "border-b border-overlay/10";
-const ROW_INPUT = "w-full min-w-0 flex-1 bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-faint";
+export const ROW = "flex min-h-[46px] items-center gap-3 px-4";
+export const ROW_LINE = "border-b border-overlay/10";
+export const ROW_INPUT = "w-full min-w-0 flex-1 bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-faint";
 
 /**
  * The habit's name, with ready-made ideas in the app's standard suggestion list (as under a task's Title cell):
@@ -318,7 +318,7 @@ function NameField({ inputRef, value, onChange, ideas, onPick, label }: {
 }
 
 /** A titled block of the settings-style editor: small caps heading, the content, and a quiet footnote. */
-function Section({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
+export function Section({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="mb-7">
       <p className="mb-1.5 px-4 text-[13px] uppercase tracking-wide text-ink-muted">{title}</p>
@@ -329,16 +329,18 @@ function Section({ title, note, children }: { title: string; note?: React.ReactN
 }
 
 /** The habit editor's sheet, built like the Menu: a grey grouped page with white rounded groups over a dimmed screen. */
-function SettingsSheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+export function SettingsSheet({ label, onClose, children, wide = false }: { label: string; onClose: () => void; children: React.ReactNode; /** Wider on large screens (Overview). */ wide?: boolean }) {
+  const self = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // Only the sheet on top closes (a New goal sheet over the Goals sheet closes alone).
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && [...document.querySelectorAll('[role="dialog"]')].at(-1) === self.current) onClose(); };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
   return createPortal(
-    <div className="pw-menu-backdrop fade-in fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}
+    <div ref={self} className="pw-menu-backdrop fade-in fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pw-grouped-bg glass-in flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[20px] bg-canvas shadow-themed sm:max-h-[88dvh] sm:rounded-[20px]">
+      <div className={cn("pw-grouped-bg glass-in flex max-h-[92dvh] w-full flex-col", wide ? "max-w-2xl" : "max-w-lg", "overflow-hidden rounded-t-[20px] bg-canvas shadow-themed sm:max-h-[88dvh] sm:rounded-[20px]")}>
         <div className="flex items-center justify-between gap-4 px-5 pb-2 pt-5">
           <h2 className="min-w-0 truncate text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{label}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-overlay/[0.08] text-ink-muted transition-transform active:scale-95"><X className="h-4 w-4" /></button>

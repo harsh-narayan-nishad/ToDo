@@ -7,6 +7,7 @@ import { Modal } from "@/components/Modal";
 import { addMinutesToTime, clock, dayLabel, duration, today } from "@/lib/days";
 import { earliestStart, loggableDays, logProblem, nowLocal, planProblem, titleProblem, BACKFILL_DAYS } from "@/lib/rules";
 import { todoApi, type Priority, type Task } from "@/lib/todo";
+import { goalsApi, periodLabel, type Goal } from "@/lib/goals";
 import { cn } from "@/lib/utils";
 import LiquidGlass from "@/components/LiquidGlass";
 import { ButtonWheel } from "@/components/WheelSpinner";
@@ -164,6 +165,10 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
   const [allDay, setAllDay] = useState(!task.startTime);
   const [startTime, setStartTime] = useState(task.startTime ?? "09:00");
   const [endTime, setEndTime] = useState(task.endTime ?? "10:00");
+  /** The goal it counts toward ("" = none): goals in progress, plus its current one even if already reached. */
+  const [goalId, setGoalId] = useState(task.goalId ?? "");
+  const [goals, setGoals] = useState<Goal[]>([]);
+  useEffect(() => { goalsApi.list().then((g) => setGoals(g.filter((x) => x.status === "open" || x.id === task.goalId)), () => undefined); }, [task.goalId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,7 +184,8 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
     try {
       // Only send dates when they changed, so a finished task can still get a new title or notes.
       const dates = startChanged || dueChanged ? plan : {};
-      onSaved(await todoApi.update(task.id, { title: title.trim(), notes: notes.trim(), priority, ...dates }));
+      const goal = (goalId || null) !== (task.goalId ?? null) ? { goalId: goalId || null } : {};
+      onSaved(await todoApi.update(task.id, { title: title.trim(), notes: notes.trim(), priority, ...dates, ...goal }));
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -192,6 +198,12 @@ export function EditTaskDialog({ task, onClose, onSaved }: { task: Task; onClose
       <form onSubmit={(e) => void save(e)} className="flex flex-col gap-5">
         <label className={LABEL}>Title<input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required className={FIELD} /></label>
         <label className={LABEL}>Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} className={cn(FIELD, "resize-none")} /></label>
+        <label className={LABEL}>Goal
+          <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className={FIELD}>
+            <option value="">No goal</option>
+            {goals.map((g) => <option key={g.id} value={g.id}>{g.title} · {periodLabel(g.period)}</option>)}
+          </select>
+        </label>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className={LABEL}>Priority
             <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className={FIELD}>

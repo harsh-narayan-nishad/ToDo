@@ -1,8 +1,8 @@
 "use client";
 import { useMemo, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
-import { GlassSheet } from "@/components/HabitDialogs";
-import { FIELD, Pager } from "@/components/ui";
+import { Section, Segmented, SettingsSheet } from "@/components/HabitDialogs";
+import { Pager } from "@/components/ui";
 import { addDays, dayLabel, duration, today } from "@/lib/days";
 import { weekday } from "@/lib/repeat";
 import type { Task } from "@/lib/todo";
@@ -16,7 +16,8 @@ const SORTS: { id: Sort; label: string }[] = [{ id: "occurrences", label: "Most 
 interface Group { key: string; title: string; items: Task[]; done: number; missed: number; open: number; upcoming: number; minutes: number; first: string; last: string; next: string | null }
 
 const status = (t: Task, now: string) => (t.status === "done" ? "done" : t.dueDay < now ? "missed" : t.startDay > now ? "upcoming" : "open");
-const TONE = { done: "bg-ink text-canvas", missed: "border border-accent-extreme/50 text-accent-extreme", open: "border border-ink/40 text-ink", upcoming: "border border-dashed border-overlay/25 text-ink-muted" };
+/** Each occurrence as a rounded chip: done (green), missed (red), open (blue), upcoming (dashed). */
+const TONE = { done: "bg-[#34C759] text-white", missed: "border border-[#FF3B30]/50 text-[#FF3B30]", open: "border border-[#3478F6]/50 text-[#3478F6]", upcoming: "border border-dashed border-overlay/25 text-ink-muted" };
 
 /**
  * Overview of all tasks: totals (done, missed, open, upcoming, time worked), then every task with how often it
@@ -73,86 +74,82 @@ export function TaskOverview({ tasks, onClose }: { tasks: Task[]; onClose: () =>
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
   const p = Math.min(page, pages);
 
-  const stat = (label: string, value: string | number, hint?: string) => (
-    <div className="border border-overlay/10 bg-canvas-raised/60 px-4 py-3">
-      <p className="text-xs text-ink-muted">{label}</p>
-      <p className="mt-1 font-display text-2xl text-ink">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-ink-faint">{hint}</p>}
+  const stat = (label: string, value: string | number, hint?: string, tone = "text-ink") => (
+    <div className="px-4 py-3">
+      <p className="text-[12px] uppercase tracking-wide text-ink-faint">{label}</p>
+      <p className={cn("mt-0.5 font-display text-[26px] leading-tight tabular-nums", tone)}>{value}</p>
+      {hint && <p className="mt-0.5 text-[12px] text-ink-muted">{hint}</p>}
     </div>
   );
 
   return (
-    <GlassSheet label="Overview" onClose={onClose} wide>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat("All tasks", totals.all, `${groups.length} different`)}
-        {stat("Done", totals.done, finished ? `${Math.round((totals.done / finished) * 100)}% of past tasks` : undefined)}
-        {stat("Missed", totals.missed, "Past due, not done")}
-        {stat("Time worked", duration(totals.minutes))}
-        {stat("Open now", totals.open)}
-        {stat("Upcoming", totals.upcoming, `${totals.week} this week`)}
-        {stat("Done per task", groups.length ? (totals.done / groups.length).toFixed(1) : "–", "On average")}
-        {stat("Time per done task", totals.done ? duration(Math.round(totals.minutes / totals.done)) : "–")}
-      </div>
-
-      {finished > 0 && (
-        <div>
-          <div className="flex h-2 w-full overflow-hidden bg-overlay/10" aria-hidden>
-            <span className="bg-ink" style={{ width: `${(totals.done / totals.all) * 100}%` }} />
-            <span className="bg-accent-extreme/60" style={{ width: `${(totals.missed / totals.all) * 100}%` }} />
-            <span className="bg-ink/35" style={{ width: `${(totals.open / totals.all) * 100}%` }} />
-          </div>
-          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint">
-            <span><span className="mr-1.5 inline-block h-2 w-2 bg-ink" />Done {totals.done}</span>
-            <span><span className="mr-1.5 inline-block h-2 w-2 bg-accent-extreme/60" />Missed {totals.missed}</span>
-            <span><span className="mr-1.5 inline-block h-2 w-2 bg-ink/35" />Open {totals.open}</span>
-            <span><span className="mr-1.5 inline-block h-2 w-2 bg-overlay/10" />Upcoming {totals.upcoming}</span>
-          </p>
+    <SettingsSheet label="Overview" onClose={onClose} wide>
+      {/* The totals: one rounded group of facts, two per row (four on wide screens). */}
+      <Section title="Totals">
+        <div className="pw-group grid grid-cols-2 overflow-hidden rounded-[14px] sm:grid-cols-4 [&>div]:border-overlay/10 max-sm:[&>div:nth-child(even)]:border-l max-sm:[&>div:nth-child(n+3)]:border-t sm:[&>div:not(:nth-child(4n+1))]:border-l sm:[&>div:nth-child(n+5)]:border-t">
+          {stat("All tasks", totals.all, `${groups.length} different`)}
+          {stat("Done", totals.done, finished ? `${Math.round((totals.done / finished) * 100)}% of past tasks` : undefined, "text-[#34C759]")}
+          {stat("Missed", totals.missed, "Past due, not done", totals.missed ? "text-[#FF3B30]" : "text-ink")}
+          {stat("Time worked", duration(totals.minutes), undefined, "text-[#3478F6]")}
+          {stat("Open now", totals.open)}
+          {stat("Upcoming", totals.upcoming, `${totals.week} this week`)}
+          {stat("Done per task", groups.length ? (totals.done / groups.length).toFixed(1) : "–", "On average")}
+          {stat("Time per done task", totals.done ? duration(Math.round(totals.minutes / totals.done)) : "–")}
         </div>
-      )}
-
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h3 className="text-sm uppercase tracking-wide text-ink-muted">By task</h3>
-          <div className="flex flex-wrap gap-1">
-            {SORTS.map((s) => (
-              <button key={s.id} type="button" onClick={() => { setSort(s.id); setPage(1); }} aria-pressed={sort === s.id}
-                className={cn("rounded-none border px-3 py-1 text-xs transition-colors", sort === s.id ? "border-ink bg-ink text-canvas" : "border-overlay/15 text-ink-muted")}>{s.label}</button>
-            ))}
+        {finished > 0 && (
+          <div className="mt-3 px-1">
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-overlay/10" aria-hidden>
+              <span className="bg-[#34C759]" style={{ width: `${(totals.done / totals.all) * 100}%` }} />
+              <span className="bg-[#FF3B30]/70" style={{ width: `${(totals.missed / totals.all) * 100}%` }} />
+              <span className="bg-[#3478F6]/70" style={{ width: `${(totals.open / totals.all) * 100}%` }} />
+            </div>
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-muted">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#34C759]" />Done {totals.done}</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#FF3B30]/70" />Missed {totals.missed}</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#3478F6]/70" />Open {totals.open}</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-overlay/20" />Upcoming {totals.upcoming}</span>
+            </p>
           </div>
-        </div>
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-0 top-2.5 h-4 w-4 text-ink-faint" aria-hidden />
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Find a task" aria-label="Find a task" className={cn(FIELD, "mt-0 pl-6")} />
+        )}
+      </Section>
+
+      <Section title="By task">
+        <div className="flex flex-col gap-3">
+        <Segmented soft label="Sort tasks" value={sort} options={SORTS} onChange={(s) => { setSort(s); setPage(1); }} />
+        <label className="pw-group flex min-h-[44px] items-center gap-2.5 rounded-[14px] px-4">
+          <Search className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+          <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Find a task" aria-label="Find a task"
+            className="w-full min-w-0 bg-transparent py-2.5 text-[16px] text-ink outline-none placeholder:text-ink-faint" />
         </label>
-        {list.length === 0 ? <p className="text-sm text-ink-faint">{tasks.length ? "No task matches." : "No tasks yet."}</p> : (
-          <ul className="flex flex-col divide-y divide-overlay/10 border border-overlay/10">
+        {list.length === 0 ? <p className="px-4 text-[15px] text-ink-faint">{tasks.length ? "No task matches." : "No tasks yet."}</p> : (
+          <ul className="pw-group flex flex-col divide-y divide-overlay/10 overflow-hidden rounded-[14px]">
             {list.slice((p - 1) * PAGE, p * PAGE).map((g) => {
               const r = rate(g);
               const isOpen = open === g.key;
               return (
                 <li key={g.key}>
-                  <button type="button" onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen} className="flex w-full items-start gap-3 px-4 py-3 text-left">
+                  <button type="button" onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors active:bg-overlay/[0.06]">
                     <span className="min-w-0 flex-1">
-                      <span className="block break-words text-ink">{g.title}</span>
-                      <span className="mt-1 block text-xs text-ink-faint">
+                      <span className="block break-words text-[16px] text-ink">{g.title}</span>
+                      <span className="mt-0.5 block text-[13px] leading-snug text-ink-muted">
                         {g.items.length} {g.items.length === 1 ? "time" : "times"} · {g.done} done{g.missed ? ` · ${g.missed} missed` : ""}{g.open ? ` · ${g.open} open` : ""}{g.upcoming ? ` · ${g.upcoming} upcoming` : ""}
                         {` · ${g.first === g.last ? dayLabel(g.first, now) : `${dayLabel(g.first, now)} → ${dayLabel(g.last, now)}`}`}
                         {g.next && ` · next ${dayLabel(g.next, now).toLowerCase()}`}
                       </span>
-                      {r >= 0 && <span className="mt-2 block h-1 w-full max-w-xs bg-overlay/10"><span className="block h-full bg-ink" style={{ width: `${r * 100}%` }} /></span>}
+                      {r >= 0 && <span className="mt-2 block h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-overlay/10"><span className="block h-full rounded-full bg-[#34C759]" style={{ width: `${r * 100}%` }} /></span>}
                     </span>
                     <span className="shrink-0 text-right">
-                      <span className="block font-mono text-sm text-ink">{duration(g.minutes)}</span>
-                      <span className="block text-xs text-ink-faint">{r >= 0 ? `${Math.round(r * 100)}% done` : "not due yet"}</span>
+                      <span className="block text-[15px] font-medium tabular-nums text-ink">{duration(g.minutes)}</span>
+                      <span className={cn("block text-[12px]", r >= 0 ? "text-[#34C759]" : "text-ink-faint")}>{r >= 0 ? `${Math.round(r * 100)}% done` : "not due yet"}</span>
                     </span>
-                    <ChevronDown className={cn("mt-1 h-4 w-4 shrink-0 text-ink-muted transition-transform", isOpen && "rotate-180")} aria-hidden />
+                    <ChevronDown className={cn("mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform", isOpen && "rotate-180")} aria-hidden />
                   </button>
                   {isOpen && (
                     <div className="flex flex-wrap gap-1.5 px-4 pb-4">
                       {g.items.map((t) => {
                         const s = status(t, now);
                         return (
-                          <span key={t.id} title={`${s}${t.loggedMinutes ? ` · ${duration(t.loggedMinutes)}` : ""}`} className={cn("px-2 py-0.5 text-xs", TONE[s])}>
+                          <span key={t.id} title={`${s}${t.loggedMinutes ? ` · ${duration(t.loggedMinutes)}` : ""}`} className={cn("rounded-full px-2.5 py-0.5 text-[12px]", TONE[s])}>
                             {t.startDay === t.dueDay ? dayLabel(t.startDay, now) : `${dayLabel(t.startDay, now)} → ${dayLabel(t.dueDay, now)}`}
                             {t.loggedMinutes ? ` · ${duration(t.loggedMinutes)}` : ""}
                           </span>
@@ -165,8 +162,9 @@ export function TaskOverview({ tasks, onClose }: { tasks: Task[]; onClose: () =>
             })}
           </ul>
         )}
-        {list.length > 0 && <Pager page={p} total={list.length} limit={PAGE} onPage={setPage} />}
-      </section>
-    </GlassSheet>
+        {list.length > 0 && <div className="px-1"><Pager page={p} total={list.length} limit={PAGE} onPage={setPage} /></div>}
+        </div>
+      </Section>
+    </SettingsSheet>
   );
 }

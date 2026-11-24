@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { ChevronDown, Crown, Flame } from "lucide-react";
+import { ChevronDown, ChevronRight, Crown, Flame } from "lucide-react";
 import { Card, Stat } from "@/components/ui";
 import { GoldCoin } from "@/components/GoldCoin";
 import { ButtonWheel } from "@/components/WheelSpinner";
@@ -11,12 +11,16 @@ import type { User } from "@/lib/api";
 import { dayLabel, duration, longDay } from "@/lib/days";
 import { todoApi, type HeatDay, type Summary } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { goalsApi, type Goal } from "@/lib/goals";
 
 /** Totals and hours worked, all from the server. */
-export function ProfilePanel({ user, version, onOpenDay }: { user: User; version: number; onOpenDay: (day: string) => void }) {
+export function ProfilePanel({ user, version, onOpenDay, onOpenGoals }: { user: User; version: number; onOpenDay: (day: string) => void; /** Opens the Goal review page. */ onOpenGoals: () => void }) {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const coins = useWallet(version);
+  /** Goals (cached), for "Goals reached this year" and its page; [] if they cannot be loaded. */
+  const [goals, setGoals] = useState<Goal[] | null>(null);
+  useEffect(() => { goalsApi.list().then(setGoals, () => setGoals([])); }, [version]);
 
   useEffect(() => {
     todoApi.summary().then((s) => { setData(s); setError(null); }, (e) => setError(e instanceof Error ? e.message : "Could not load your profile."));
@@ -24,7 +28,7 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
 
   if (error) return <p className="text-sm text-accent-extreme" role="alert">{error}</p>;
   // The profile appears in one go, with its gold coins: never the stats first and the coins a moment later.
-  if (!data || (!coins.wallet && !coins.error)) return <PanelLoader label="Loading your profile" />;
+  if (!data || (!coins.wallet && !coins.error) || !goals) return <PanelLoader label="Loading your profile" />;
   const { totals: t } = data;
 
   return (
@@ -60,7 +64,24 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
         <Stat className="pw-card" label="Tasks created" value={t.created} />
         <Stat className="pw-card" label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
         <Stat className="pw-card" label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
-        <Stat className="pw-card" label="Hours worked" value={`${t.hours} h`} tone="blue" hint={t.workedDays ? `about ${duration(t.avgMinutesPerWorkedDay)} per working day` : "log time on a task"} />
+        {/* Goals reached this year; a tap opens the year's goals (reached and created), like History. */}
+        {(() => {
+          const y = String(new Date().getFullYear());
+          const reached = goals.filter((g) => g.status === "done" && g.completedDay?.startsWith(y)).length;
+          const set = goals.filter((g) => g.startDay.startsWith(y)).length;
+          return (
+            // Looks like what it is: a card that opens more (a › in the corner, a progress bar, a "View goals" link).
+            <button type="button" onClick={onOpenGoals} aria-label={`Goals reached in ${y}: ${reached} of ${set}. Open this year's goals`}
+              className="pw-card group flex h-full flex-col rounded-none border border-overlay/10 bg-canvas-raised p-4 text-left shadow-[inset_0_0_0_1px_rgba(52,120,246,0.18)] transition-transform active:scale-[0.98] sm:p-5">
+              <span className="text-sm text-ink-muted">Goals reached in {y}</span>
+              <span className="mt-1 font-display text-3xl text-accent-slow">{reached}<span className="text-xl text-ink-faint"> / {set}</span></span>
+              <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-overlay/10">
+                <span className="block h-full rounded-full bg-[#3478F6] transition-[width] duration-500" style={{ width: `${set ? Math.min(100, Math.round((reached / set) * 100)) : 0}%` }} />
+              </span>
+              <span className="mt-auto flex items-center gap-1 pt-2.5 text-[13px] font-medium text-[#3478F6]">View goals<ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden /></span>
+            </button>
+          );
+        })()}
       </div>
 
       <WeekChart days={data.heatmap.slice(-7)} onOpenDay={onOpenDay} />
@@ -86,8 +107,8 @@ function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: stri
   const finished = days.reduce((a, d) => a + d.completed, 0);
   const added = days.reduce((a, d) => a + d.created, 0);
   const best = days.reduce<HeatDay | null>((b, d) => (d.minutes > (b?.minutes ?? 0) ? d : b), null);
-  // Opens on time worked, or on tasks finished when no time was logged this week.
-  const [measure, setMeasure] = useState<"time" | "tasks">(() => (total === 0 && finished > 0 ? "tasks" : "time"));
+  // Opens on tasks finished (Time is one tap away in the switch).
+  const [measure, setMeasure] = useState<"time" | "tasks">("tasks");
   const time = measure === "time";
   const value = (d: HeatDay) => (time ? d.minutes : d.completed);
   const fmt = (v: number) => (time ? hm(v) : `${v} ${v === 1 ? "task" : "tasks"}`);

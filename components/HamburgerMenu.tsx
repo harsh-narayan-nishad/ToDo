@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, Compass, History, Maximize, Menu, Minimize, MoreHorizontal, Moon, Palette, Sun, X } from "lucide-react";
+import { Check, ChevronRight, Compass, History, Maximize, Menu, Minimize, Moon, MoreHorizontal, Palette, Sun, Target, X } from "lucide-react";
 import type { User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { TabIcon } from "@/components/TabIcons";
@@ -34,15 +34,17 @@ function Row({ icon: Icon, tint, label, value, mark = "chevron", danger, onClick
 }
 /** Phones: full screen stays on (across reloads) until turned off in the menu. */
 const FULL_KEY = "pacewise-todo-fullscreen";
+/** Sections already in the phones' bottom tab bar: not repeated in the menu. */
+const IN_TAB_BAR = ["tasks", "habits", "calendar", "profile"];
 /** Icon tile colours per section. */
-const TINT: Record<string, string> = { tasks: "#3478F6", habits: "#30C26A", profile: "#8C8F98", calendar: "#F2453D" };
+const TINT: Record<string, string> = { tasks: "#3478F6", habits: "#30C26A", goals: "#FF9500", profile: "#8C8F98", calendar: "#F2453D" };
 
 /**
  * The hamburger menu, built like Pacewise's (Pacewise/components/Navigation/HamburgerMenu.tsx): a drawer from the
  * right over a dimmed page. Laid out as a settings list: the account on top, then rounded groups of rows (the
  * sections on phones; History and Theme), and Log out on its own.
  */
-export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false, onTour }: {
+export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sections, current, onSection, tab = false, tabActive = false, onTour, onNewGoal }: {
   user: User; light: boolean; setLight: (v: boolean) => void; onHistory: () => void; onSignOut: () => void;
   /** Phones only: the section tabs (Tasks, Habits, Profile, Calendar) live in this menu instead of on the page. */
   sections?: { id: string; label: string; icon: typeof Menu }[]; current?: string; onSection?: (id: string) => void;
@@ -50,6 +52,8 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
   tab?: boolean; tabActive?: boolean;
   /** "Tour": opens the Tour guide (every step with a picture, and a button that plays the live tour). */
   onTour?: () => void;
+  /** "New goal": the goal sheet, straight from the menu. */
+  onNewGoal?: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -123,7 +127,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
     <>
       {tab ? (
         <button type="button" onClick={() => setOpen(true)} aria-label="More" title="More" aria-haspopup="dialog"
-          className="flex flex-1 items-center justify-center py-2" style={{ color: tabActive || open ? "#3478F6" : "#8C8F98" }}>
+          className="flex flex-1 items-center justify-center py-2 outline-none [-webkit-tap-highlight-color:transparent] focus-visible:[&>span]:ring-2 focus-visible:[&>span]:ring-[#3478F6]/50" style={{ color: tabActive || open ? "#3478F6" : "#8C8F98" }}>
           <span className={cn("grid h-10 w-14 place-items-center rounded-full transition-[background-color,transform] duration-200 active:scale-90", (tabActive || open) && "bg-[#3478F6]/[0.12]")}>
             <TabIcon name="more" active={tabActive || open} className="h-[27px] w-[27px]" />
           </span>
@@ -161,9 +165,10 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
               {sections && onSection && (
                 <nav className="md:hidden" aria-label="Sections">
                   <Group>
-                    {sections.map(({ id, label, icon }, i) => (
+                    {/* Only what the bottom tab bar does not already have (Tasks, Habits, Calendar and Profile are there). */}
+                    {sections.filter((s) => !IN_TAB_BAR.includes(s.id)).map(({ id, label, icon }, i, list) => (
                       <Row key={id} icon={icon} tint={TINT[id] ?? "#8C8F98"} label={label} mark={current === id ? "check" : "chevron"} current={current === id}
-                        last={i === sections.length - 1} onClick={() => { onSection(id); close(); }} />
+                        last={i === list.length - 1} onClick={() => { onSection(id); close(); }} />
                     ))}
                   </Group>
                 </nav>
@@ -172,6 +177,7 @@ export function HamburgerMenu({ user, light, setLight, onHistory, onSignOut, sec
               <Group title="Your To-do">
                 {onTour && <Row icon={Compass} tint="#30C26A" label="Tour" value="Guide" onClick={() => { close(); onTour(); }} />}
                 {/* History lives here instead of in the section tabs. */}
+                {onNewGoal && <Row icon={Target} tint="#FF9500" label="New goal" mark="none" onClick={() => { close(); onNewGoal(); }} />}
                 <Row icon={History} tint="#F59A23" label="History" onClick={() => { onHistory(); close(); }} />
                 {canFull && <Row icon={full || keepFull ? Minimize : Maximize} tint="#3478F6" label="Full screen" value={full || keepFull ? "On" : "Off"} mark="none" onClick={() => { toggleFull(); close(); }} />}
                 <Row icon={Palette} tint="#6A5AE0" label="Theme" value={light ? "Light" : "Dark"} expanded={section === "theme"} last={section !== "theme"}

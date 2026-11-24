@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, CalendarDays, ListChecks, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, ListChecks, Target, Sprout, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { HamburgerMenu } from "@/components/HamburgerMenu";
 import { Tour } from "@/components/Tour";
@@ -15,6 +15,8 @@ import { PLANNER_DRAFT_KEY } from "@/components/TaskPlanner";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { HabitsPanel } from "@/components/HabitsPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
+import { GoalSheet, GoalsPanel } from "@/components/GoalsPanel";
+import { GoalReviewPanel } from "@/components/GoalReviewPanel";
 import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
 import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
@@ -22,17 +24,27 @@ import { cn } from "@/lib/utils";
 import { isNeetAspirant, isSoftwareEngineer } from "@/lib/neetSyllabus";
 import { isPremium, useWallet } from "@/lib/coins";
 
-type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs";
+type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs" | "goals" | "review";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   // History is in the hamburger menu, not here.
   // Habit tracker: micro to macro habits, habits to quit, and sleep.
   { id: "habits", label: "Habits", icon: Sprout },
+  // Goals with a deadline (weekly, monthly, quarterly, yearly) that tasks count toward.
+  { id: "goals", label: "Goals", icon: Target },
   { id: "profile", label: "Profile", icon: UserRound },
   // The Pacewise calendar, copied into To-do: it opens here instead of sending you to Pacewise.
   { id: "calendar", label: "Calendar", icon: CalendarDays },
 ];
 const THEME_KEY = "pacewise-todo-theme";
+/** The gap between two pages side by side during a swipe. */
+const PAGE_GAP = 16;
+const TAB_IDS: Tab[] = ["tasks", "history", "habits", "profile", "calendar", "docs", "goals", "review"];
+/** Where ← goes when there is no earlier section in this visit (the app was opened straight on this one). */
+const PARENT: Partial<Record<Tab, Tab>> = { review: "profile" };
+/** How many sections deep this visit is (kept across reloads), so ← steps back inside the app and never leaves it. */
+const DEPTH_KEY = "pacewise-todo-depth";
+const depth = { get: () => { try { return Number(sessionStorage.getItem(DEPTH_KEY)) || 0; } catch { return 0; } }, set: (n: number) => { try { sessionStorage.setItem(DEPTH_KEY, String(Math.max(0, n))); } catch { /* storage blocked */ } } };
 /** The theme the person picked (saved only when they pick one). Without a choice: light on phones, dark on wider screens. */
 const THEME_CHOICE_KEY = "pacewise-todo-theme-choice";
 const isPhone = () => window.matchMedia("(max-width: 767px)").matches;
@@ -40,7 +52,12 @@ const isPhone = () => window.matchMedia("(max-width: 767px)").matches;
 export function TodoApp() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<Tab>("tasks");
+  /** The open section; after a reload, the one this history entry was on (so a refresh never drops you on Tasks). */
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "tasks";
+    const t = (window.history.state as { todoTab?: Tab } | null)?.todoTab;
+    return t && TAB_IDS.includes(t) ? t : "tasks";
+  });
   const [historyDay, setHistoryDay] = useState(today());
   /** Starts as the picked theme (or light on phones), so the page never switches to dark for a moment on load. */
   const [light, setLight] = useState(() => {
@@ -112,6 +129,7 @@ export function TodoApp() {
     if (!st?.todoTab) window.history.replaceState({ ...(st ?? {}), todoTab: "tasks" }, "");
     const onPop = (e: PopStateEvent) => {
       fromBack.current = true;
+      depth.set(depth.get() - 1);
       setTab((e.state as { todoTab?: Tab } | null)?.todoTab ?? "tasks");
     };
     window.addEventListener("popstate", onPop);
@@ -119,11 +137,12 @@ export function TodoApp() {
   }, []);
   useEffect(() => {
     if (fromBack.current) { fromBack.current = false; return; }
-    if ((window.history.state as { todoTab?: Tab } | null)?.todoTab !== tab) window.history.pushState({ todoTab: tab }, "");
+    if ((window.history.state as { todoTab?: Tab } | null)?.todoTab !== tab) { window.history.pushState({ todoTab: tab }, ""); depth.set(depth.get() + 1); }
   }, [tab]);
+  /** ← like Apple's Back: the section you came from; with none in this visit, the section this one belongs to. */
   const goBack = useCallback(() => {
-    if ((window.history.state as { todoTab?: Tab } | null)?.todoTab && window.history.length > 1) window.history.back();
-    else setTab("tasks");
+    if ((window.history.state as { todoTab?: Tab } | null)?.todoTab && depth.get() > 0) window.history.back();
+    else setTab((t) => PARENT[t] ?? "tasks");
   }, []);
   /** Phones get a bottom tab bar (sections, notifications, More); wider screens keep the bell and menu at the top. */
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches);
@@ -143,6 +162,10 @@ export function TodoApp() {
    * and sheets (portals) never switch tabs. The page moves with `left` (not a transform), so fixed buttons stay put.
    */
   const mainRef = useRef<HTMLElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
+  /** The next section, drawn beside the open one while a swipe is under way (`top`: lined up with the screen's top). */
+  const [peek, setPeek] = useState<{ tab: Tab; dir: 1 | -1; top: number } | null>(null);
+  const peekRef = useRef<{ tab: Tab; dir: 1 | -1; top: number } | null>(null);
   const tabRef = useRef(tab);
   tabRef.current = tab;
   useEffect(() => {
@@ -167,7 +190,25 @@ export function TodoApp() {
       el.style.position = "relative";
       el.style.left = `${x}px`;
     };
-    const clear = () => { el.style.transition = ""; el.style.left = ""; el.style.position = ""; el.style.opacity = ""; document.documentElement.style.overflowX = ""; };
+    /**
+     * While a swipe moves the pages, nothing may widen the page: `clip` on both html and body (a phone widens its layout,
+     * and zooms out, for anything sticking out sideways unless both are clipped).
+     */
+    const lockX = (on: boolean) => { for (const n of [document.documentElement, document.body]) n.style.overflowX = on ? "clip" : ""; };
+    const clear = () => { el.style.transition = ""; el.style.left = ""; el.style.position = ""; el.style.opacity = ""; lockX(false); };
+    // Anything an earlier swipe (or an older version of the app) left behind is cleared first.
+    clear();
+    /** Draws (or removes) the neighbouring section beside the open one. */
+    const showPeek = (next: Tab | undefined, dir: 1 | -1) => {
+      if (reduced) return;
+      if (!next) { if (peekRef.current) { peekRef.current = null; flushSync(() => setPeek(null)); } return; }
+      if (peekRef.current?.tab === next) return;
+      const r = pagesRef.current?.getBoundingClientRect();
+      const v = { tab: next, dir, top: r ? Math.max(0, -r.top) : 0 };
+      peekRef.current = v;
+      flushSync(() => setPeek(v));
+    };
+    const dropPeek = () => { peekRef.current = null; setPeek(null); };
     const after = (ms: number, fn: () => void) => window.setTimeout(fn, ms);
     /** iOS-style rubber band past the first / last tab. */
     const rubber = (x: number, w: number) => Math.sign(x) * (1 - 1 / ((Math.abs(x) * 0.55) / w + 1)) * w;
@@ -186,7 +227,7 @@ export function TodoApp() {
       if (!g.lock) {
         if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
         g.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
-        if (g.lock === "x") document.documentElement.style.overflowX = "hidden";
+        if (g.lock === "x") lockX(true);
       }
       if (g.lock !== "x") return;
       e.preventDefault(); // the page moves sideways, so it must not scroll up / down at the same time
@@ -198,6 +239,8 @@ export function TodoApp() {
       g.dx = dx;
       const i = order.indexOf(tabRef.current);
       const edge = (dx > 0 && i === 0) || (dx < 0 && i === order.length - 1);
+      // WhatsApp-style: the next section is right there beside this one, moving with the finger.
+      showPeek(edge ? undefined : order[i + (dx < 0 ? 1 : -1)], dx < 0 ? 1 : -1);
       if (!reduced) place(edge ? rubber(dx, el.clientWidth) : dx);
     };
     const up = () => {
@@ -211,30 +254,31 @@ export function TodoApp() {
       const flick = Math.abs(s.vx) > 0.35 && Math.sign(s.vx) === Math.sign(s.dx);
       const go = !!next && (Math.abs(s.dx) > w / 3 || flick);
       if (!go) {
-        if (reduced) { clear(); return; }
+        if (reduced) { clear(); dropPeek(); return; }
         animating = true;
-        place(0, 380, "cubic-bezier(0.34, 1.3, 0.64, 1)"); // a soft spring back
-        after(390, () => { clear(); animating = false; });
+        place(0, 380, "cubic-bezier(0.34, 1.3, 0.64, 1)"); // a soft spring back (the next section slides back out with it)
+        after(390, () => { clear(); dropPeek(); animating = false; });
         return;
       }
-      if (reduced) { clear(); setTab(next); return; }
+      if (reduced) { clear(); dropPeek(); setTab(next); return; }
       animating = true;
-      // Out the way it was going, at about the finger's speed; the next tab comes in from the other side.
-      const out = Math.min(260, Math.max(140, (w - Math.abs(s.dx)) / Math.max(0.8, Math.abs(s.vx))));
-      el.style.opacity = "0.6";
-      place(-dir * w, out);
+      // Both pages glide on together, at about the finger's speed, until the next one fills the screen; it then simply
+      // becomes the open section (the same page, not drawn again), lined up where it was.
+      const dist = w + PAGE_GAP;
+      const out = Math.min(300, Math.max(160, (dist - Math.abs(s.dx)) / Math.max(0.8, Math.abs(s.vx))));
+      showPeek(next, dir as 1 | -1);
+      place(-dir * dist, out);
       after(out, () => {
-        flushSync(() => setTab(next));
-        el.style.opacity = "0.6";
-        place(dir * w * 0.35);
-        void el.offsetWidth; // start the slide-in from there
-        el.style.opacity = "1";
-        place(0, 320);
-        after(330, () => { clear(); animating = false; });
+        const top = peekRef.current?.top ?? 0;
+        el.style.transition = "none";
+        flushSync(() => { peekRef.current = null; setPeek(null); setTab(next); });
+        clear();
+        if (top > 0) window.scrollTo(0, Math.max(0, window.scrollY - top));
+        animating = false;
       });
     };
     const cancel = () => {
-      if (g?.lock === "x" && !reduced) { animating = true; place(0, 300); after(310, () => { clear(); animating = false; }); }
+      if (g?.lock === "x" && !reduced) { animating = true; place(0, 300); after(310, () => { clear(); dropPeek(); animating = false; }); }
       g = null;
     };
     el.addEventListener("touchstart", down, { passive: true });
@@ -249,29 +293,58 @@ export function TodoApp() {
   }, [phone, user, checking]);
   /** The guided tour (More → Take the tour). */
   const [touring, setTouring] = useState(false);
+  /** "New goal" in the menu: the goal sheet, wherever you are. */
+  const [newGoal, setNewGoal] = useState(false);
   /** Open tasks due now (today + overdue), for the phone greeting; null until the task list has loaded. */
   const [dueNow, setDueNow] = useState<number | null>(null);
 
   if (checking) return <div className="relative min-h-screen"><WheelSpinner label="Signing you in" /></div>;
   if (!user) return <LoginCard onSignedIn={setUser} />;
 
+  /** One section's page: its title row and its panel. `peekOnly`: drawn beside the open one during a swipe. */
+  const renderPage = (t: Tab, peekOnly: boolean) => (
+    <>
+      <div className={cn("mb-6 flex items-center gap-3", t === "tasks" && "hidden md:flex")}>
+        {t !== "tasks" && (
+          <button type="button" onClick={goBack} aria-label="Back" title="Back"
+            className="glass-fab flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#3478F6] text-white shadow-themed md:hidden">
+            <ArrowLeft className="h-5 w-5" strokeWidth={2} />
+          </button>
+        )}
+        <h1 className="font-display text-3xl">{t === "history" ? "History" : t === "docs" ? "Tour" : t === "review" ? "Goal review" : TABS.find((x) => x.id === t)?.label}.</h1>
+      </div>
+      {t === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} onOpenGoals={() => setTab("goals")} neet={isNeetAspirant(user)} cse={isSoftwareEngineer(user)} onDueNow={peekOnly ? undefined : setDueNow} onOpenCalendar={() => setTab("calendar")} />}
+      {t === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
+      {t === "habits" && <HabitsPanel version={version} onChanged={changed} />}
+      {t === "review" && <GoalReviewPanel version={version} />}
+      {t === "goals" && <GoalsPanel version={version} onChanged={changed} />}
+      {t === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} onOpenGoals={() => setTab("review")} />}
+      {t === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
+      {t === "docs" && <DocsPanel onTour={() => setTouring(true)} />}
+    </>
+  );
+
   return (
-    <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 max-md:pb-28 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
+    // overflow-x: clip, always: nothing in the app (a page sliding in during a swipe included) can make the page wider
+    // than the screen, so a phone never zooms out and the fixed tab bar never moves. (clip is not a scroll box: fixed
+    // and sticky parts keep working.)
+    <div className="flex min-h-screen w-full flex-col gap-6 overflow-x-clip px-4 py-6 max-md:pb-28 sm:px-6 md:flex-row md:gap-10 md:px-10 md:py-10">
       {/* Phones: a tab bar at the bottom — the sections, notifications, and More (Profile, History, theme, log out). */}
+      {newGoal && <GoalSheet onClose={() => setNewGoal(false)} onSaved={() => changed()} />}
       {touring && <Tour onClose={() => setTouring(false)} goTasks={() => setTab("tasks")} />}
       {phone && (
         <nav aria-label="Sections" data-tour="tabs" className="pw-tabbar fixed inset-x-0 bottom-0 z-50 flex px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {/* Tasks, Habits, Calendar, Profile; the Tour guide is in More. */}
           {(["tasks", "habits", "calendar", "profile"] as Tab[]).map((id) => TABS.find((t) => t.id === id)!).map(({ id, label }) => (
             <button key={id} type="button" onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined} aria-label={label} title={label}
-              className="flex flex-1 items-center justify-center py-2" style={{ color: tab === id ? "#3478F6" : "#8C8F98" }}>
+              className="flex flex-1 items-center justify-center py-2 outline-none [-webkit-tap-highlight-color:transparent] focus-visible:[&>span]:ring-2 focus-visible:[&>span]:ring-[#3478F6]/50" style={{ color: tab === id ? "#3478F6" : "#8C8F98" }}>
               {/* Icons only: the open tab sits on a soft blue pill, and the icon springs a little when pressed. */}
               <span className={cn("grid h-10 w-14 place-items-center rounded-full transition-[background-color,transform] duration-200 active:scale-90", tab === id && "bg-[#3478F6]/[0.12]")}>
                 <TabIcon name={(id === "docs" ? "tour" : id) as TabIconName} active={tab === id} className="h-[27px] w-[27px]" />
               </span>
             </button>
           ))}
-          <HamburgerMenu tab tabActive={tab === "history" || tab === "docs"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+          <HamburgerMenu tab tabActive={tab === "history" || tab === "docs"} user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()} onNewGoal={() => setNewGoal(true)}
             sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTab("docs")} />
         </nav>
       )}
@@ -290,7 +363,7 @@ export function TodoApp() {
             <div className="flex items-center gap-2">
               {/* Missed tasks, today's tasks and habit status. */}
               <NotificationBell refreshKey={refreshKey + version} onNavigate={setTab} />
-              <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()}
+              <HamburgerMenu user={user} light={light} setLight={pickTheme} onHistory={() => setTab("history")} onSignOut={() => void signOut()} onNewGoal={() => setNewGoal(true)}
                 sections={TABS} current={tab} onSection={(id) => setTab(id as Tab)} onTour={() => setTab("docs")} />
             </div>
           )}
@@ -316,21 +389,19 @@ export function TodoApp() {
       </aside>
 
       <main ref={mainRef} className="min-w-0 flex-1">
-        <div className={cn("mb-6 flex items-center gap-3", tab === "tasks" && "hidden md:flex")}>
-          {tab !== "tasks" && (
-            <button type="button" onClick={goBack} aria-label="Back" title="Back"
-              className="glass-fab flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#3478F6] text-white shadow-themed md:hidden">
-              <ArrowLeft className="h-5 w-5" strokeWidth={2} />
-            </button>
-          )}
-          <h1 className="font-display text-3xl">{tab === "history" ? "History" : tab === "docs" ? "Tour" : TABS.find((t) => t.id === tab)?.label}.</h1>
+        {/*
+          The open section, and while a swipe is under way the next one beside it (WhatsApp-style: both move with the
+          finger). Each page is keyed by its section, so when the swipe lands the page that slid in simply stays.
+        */}
+        <div ref={pagesRef} className="relative">
+          {[{ t: tab, isPeek: false }, ...(peek && peek.tab !== tab ? [{ t: peek.tab, isPeek: true }] : [])].map(({ t: pt, isPeek }) => (
+            <div key={pt} aria-hidden={isPeek || undefined} {...(isPeek ? ({ inert: "" } as Record<string, string>) : {})}
+              className={isPeek ? "pw-peek pointer-events-none absolute w-full" : undefined}
+              style={isPeek && peek ? { top: peek.top, left: peek.dir > 0 ? `calc(100% + ${PAGE_GAP}px)` : `calc(-100% - ${PAGE_GAP}px)` } : undefined}>
+              {renderPage(pt, isPeek)}
+            </div>
+          ))}
         </div>
-        {tab === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} neet={isNeetAspirant(user)} cse={isSoftwareEngineer(user)} onDueNow={setDueNow} onOpenCalendar={() => setTab("calendar")} />}
-        {tab === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
-        {tab === "habits" && <HabitsPanel version={version} onChanged={changed} />}
-        {tab === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} />}
-        {tab === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
-        {tab === "docs" && <DocsPanel onTour={() => setTouring(true)} />}
       </main>
     </div>
   );

@@ -19,7 +19,8 @@ import { CellSelect, RoundMenuButton, type DropdownGroup } from "@/components/Gl
  * can be imported too. Columns are matched by their header (Title, Notes, Priority, Date, From, To) when there is one.
  */
 /** `repeat` "" = the plan's own Repeat; otherwise this task's. Ignored when the row has a Date. */
-export interface SheetRow { key: number; title: string; notes: string; priority: Priority; day: string; repeat: Repeat | ""; allDay: boolean; startTime: string; endTime: string }
+/** `goalId` "" = the plan's goal (the When section's Goal); otherwise the goal this task counts toward. */
+export interface SheetRow { key: number; title: string; notes: string; priority: Priority; day: string; repeat: Repeat | ""; allDay: boolean; startTime: string; endTime: string; goalId?: string }
 
 let nextKey = 1000;
 export const blankRow = (): SheetRow => ({ key: nextKey++, title: "", notes: "", priority: "medium", day: "", repeat: "", allDay: true, startTime: "09:00", endTime: "10:00" });
@@ -256,6 +257,11 @@ const repeatGroups = (once: boolean, plan?: string): DropdownGroup[] => [
   { title: "Every N days", items: [{ id: "daily", label: "Every 1 day" }, ...INTERVALS.map((x, i) => ({ id: x.id, label: `Every ${i + 2} days` }))] },
   { title: "Pattern", items: PATTERNS.filter((x) => x.id !== "custom" && x.id !== "daily") },
 ];
+/** The Goal column's menu: follow the plan's goal, or pick one of the goals in progress. */
+const goalGroups = (goals: { id: string; title: string; period: string }[], plan?: string): DropdownGroup[] => [
+  { title: "", items: [{ id: "", label: "Plan's goal", meta: plan }] },
+  ...(goals.length ? [{ title: "Your goals", items: goals.map((g) => ({ id: g.id, label: g.title, meta: g.period })) }] : []),
+];
 const repeatText = (r: Repeat | "") => repeatGroups(false).flatMap((g) => g.items).find((x) => x.id === r)?.label ?? "Plan's repeat";
 
 
@@ -263,7 +269,7 @@ const CELL = "h-11 w-full bg-transparent px-3 text-sm text-ink outline-none plac
 /** The active cell, as in a well-made spreadsheet: a fine neutral outline and a slight lift, never a loud colour. */
 const TD = "border-b border-r border-overlay/10 p-0 transition-[background-color,box-shadow] duration-150 focus-within:bg-overlay/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgb(var(--ink)/0.45)]";
 
-export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, onImportPlan, toolbar }: { rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string; /** Gets the When settings an imported CSV fills in (Plan From / To / Repeat / Days). */ onImportPlan?: (plan: PlanSettings) => void; /** Shown in the Import CSV row, on the right (the Contests menu). */ toolbar?: React.ReactNode }) {
+export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, onImportPlan, toolbar, goals = [], planGoal }: { /** Goals in progress, for the Goal column. */ goals?: { id: string; title: string; period: string }[]; /** The plan's goal name (When section), shown in rows that follow it. */ planGoal?: string; rows: SheetRow[]; setRows: (fn: (rows: SheetRow[]) => SheetRow[]) => void; clashes?: Set<number>; neet?: boolean; /** The plan's repeat, shown in rows that follow it. */ planRepeat?: string; /** Gets the When settings an imported CSV fills in (Plan From / To / Repeat / Days). */ onImportPlan?: (plan: PlanSettings) => void; /** Shown in the Import CSV row, on the right (the Contests menu). */ toolbar?: React.ReactNode }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const [clockFor, setClockFor] = useState<{ key: number; which: "from" | "to" } | null>(null);
@@ -353,6 +359,8 @@ export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, on
                     <HeaderSetAll label="Priority" groups={PRIORITY_GROUPS} onPick={(v) => setRows((list) => list.map((r) => ({ ...r, priority: v as Priority })))} />
                   ) : col.id === "repeat" ? (
                     <HeaderSetAll label="Repeat" groups={repeatGroups(false, planRepeat)} onPick={(v) => setRows((list) => list.map((r) => (r.day ? r : { ...r, repeat: v as Repeat | "" })))} />
+                  ) : col.id === "goal" ? (
+                    <HeaderSetAll label="Goal" groups={goalGroups(goals, planGoal)} onPick={(v) => setRows((list) => list.map((r) => ({ ...r, goalId: v })))} />
                   ) : col.label}
                   {col.resizable && <ResizeHandle onResize={(w) => setWidth(c, w)} onReset={() => setWidth(c, SHEET_COLS[c].width)} width={widths[c]} label={col.label} />}
                 </th>
@@ -387,6 +395,11 @@ export function TaskSheet({ rows, setRows, clashes, neet = false, planRepeat, on
                   <CellSelect dataCell={`${i}-6`} value={r.day ? "" : r.repeat} display={r.day ? "Once" : r.repeat ? repeatText(r.repeat) : (planRepeat ?? "Plan's repeat")} groups={repeatGroups(!!r.day, planRepeat)} disabled={!!r.day} muted={!r.repeat}
                     title={r.day ? "A task with a Date is added on that day only" : undefined}
                     onSelect={(v) => update(r.key, { repeat: v as Repeat | "" })} onPaste={(e) => onPaste(e, i, 6)} onKeyDown={(e) => onKey(e, i, 6)} label={`Row ${i + 1} repeat`} />
+                </td>
+                <td className={TD}>
+                  {/* Maps this task to one goal (or follows the plan's goal), for the goal's progress and report. */}
+                  <CellSelect dataCell={`${i}-7`} value={r.goalId ?? ""} display={r.goalId ? (goals.find((g) => g.id === r.goalId)?.title ?? "Plan's goal") : (planGoal ?? "Plan's goal")}
+                    groups={goalGroups(goals, planGoal)} muted={!r.goalId} onSelect={(v) => update(r.key, { goalId: v })} label={`Row ${i + 1} goal`} />
                 </td>
                 <td className="border-b border-overlay/10 text-center">
                   {rows.length > 1 && <button type="button" onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))} aria-label={`Remove row ${i + 1}`} className="grid h-9 w-9 place-items-center rounded-full text-ink-faint"><Trash2 className="h-4 w-4" /></button>}
@@ -461,6 +474,7 @@ const SHEET_COLS: { id: string; label: string; width: number; min: number; resiz
   { id: "from", label: "From", width: 140, min: 112, resizable: true },
   { id: "to", label: "To", width: 140, min: 112, resizable: true },
   { id: "repeat", label: "Repeat", width: 176, min: 132, resizable: true, hint: "How often this task repeats; Plan's repeat follows the When section" },
+  { id: "goal", label: "Goal", width: 200, min: 132, resizable: true, hint: "The goal this task counts toward; Plan's goal follows the When section" },
   { id: "del", label: "", width: 52, min: 52 },
 ];
 const WIDTHS_KEY = "pacewise-todo-sheet-widths";

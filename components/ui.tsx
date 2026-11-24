@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import LiquidGlass from "@/components/LiquidGlass";
@@ -106,23 +107,31 @@ export function ConfirmDialog({ title, body, confirmLabel, danger, reason, reaso
     try { await onConfirm(text.trim()); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Failed"); setBusy(false); }
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-none border border-overlay/10 bg-canvas-raised p-6 shadow-themed sm:p-8">
-        <h2 className="font-display text-2xl">{title}</h2>
-        {body && <p className="mt-2 text-sm text-ink-muted">{body}</p>}
-        {reason && (
-          <label className={cn(LABEL, "mt-5")}>
-            Reason{reasonRequired ? "" : " (optional)"}
-            <textarea ref={ref} value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={500} className={cn(FIELD, "resize-none")} />
-          </label>
-        )}
-        {error && <p className="mt-3 text-sm text-accent-extreme" role="alert">{error}</p>}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant={danger ? "danger" : "primary"} onClick={() => void submit()} disabled={busy}>{busy && <ButtonWheel />}{busy ? "Please wait…" : confirmLabel}</Button>
+  // An iOS-style alert: a small rounded card in the middle, the title and message centred, and two buttons side by
+  // side under a hairline (Cancel in blue; the action in bold, red when it deletes). On top of everything, even sheets.
+  return createPortal(
+    <div className="notif-dim fade-in fixed inset-0 z-[200] flex items-center justify-center px-8" role="alertdialog" aria-modal="true" aria-label={title}
+      onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="pw-notif glass-in w-full max-w-[320px] overflow-hidden rounded-[20px] text-center shadow-themed">
+        <div className="px-5 pb-4 pt-5">
+          <h2 className="text-[17px] font-semibold leading-snug text-ink">{title}</h2>
+          {body && <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">{body}</p>}
+          {reason && (
+            <textarea ref={ref} value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={500} aria-label={`Reason${reasonRequired ? "" : " (optional)"}`}
+              placeholder={`Reason${reasonRequired ? "" : " (optional)"}`}
+              className="mt-3 w-full resize-none rounded-xl border border-overlay/15 bg-overlay/[0.04] px-3 py-2 text-left text-[14px] text-ink outline-none placeholder:text-ink-faint focus:border-[#3478F6]/60" />
+          )}
+          {error && <p className="mt-2 text-[13px] text-accent-extreme" role="alert">{error}</p>}
+        </div>
+        <div className="grid grid-cols-2 border-t border-overlay/15">
+          <button type="button" onClick={onClose} disabled={busy} className="h-11 text-[17px] text-[#3478F6] transition-colors active:bg-overlay/[0.08] disabled:opacity-40">Cancel</button>
+          <button type="button" onClick={() => void submit()} disabled={busy} aria-busy={busy}
+            className={cn("inline-flex h-11 items-center justify-center gap-2 border-l border-overlay/15 text-[17px] font-semibold transition-colors active:bg-overlay/[0.08] disabled:opacity-70", danger ? "text-[#FF3B30]" : "text-[#3478F6]")}>
+            {busy && <ButtonWheel />}{busy ? "Please wait…" : confirmLabel}
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

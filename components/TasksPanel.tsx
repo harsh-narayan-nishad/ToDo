@@ -6,7 +6,7 @@ import { TaskHabits } from "@/components/TaskHabits";
 import { TaskOverview } from "@/components/TaskOverview";
 import { weekday } from "@/lib/repeat";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { BarChart3, CalendarDays, Check, Clock, Eye, Lock, MoreHorizontal, NotebookPen, Pencil, Plus, Timer, Trash2 } from "lucide-react";
+import { ArrowRight, BarChart3, CalendarDays, Check, ChevronRight, Clock, Eye, Lock, MoreHorizontal, NotebookPen, Pencil, Plus, Target, Timer, Trash2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Empty, Pager } from "@/components/ui";
 import { EditTaskDialog, LogTimeDialog, NotesPopup, SpentWheel } from "@/components/TaskDialogs";
 import { lateFinishAllowed, lockedProblem } from "@/lib/rules";
@@ -14,9 +14,13 @@ import { addDays, clock, duration, rangeLabel, today, whenLabel } from "@/lib/da
 import { DropdownMenu, GlassDropdown } from "@/components/GlassDropdown";
 import { taskCounts } from "@/components/CountCards";
 import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
-import { CONTEST_PLATFORMS, todoApi, type ContestPlatform, type Priority, type Task } from "@/lib/todo";
+import { CONTEST_PLATFORMS, taskGoalIds, todoApi, type ContestPlatform, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
 import { GoldCoin } from "@/components/GoldCoin";
+import { deadlineLabel, goalsApi, periodLabel, type Goal } from "@/lib/goals";
+import { GoalsPanel } from "@/components/GoalsPanel";
+import { SettingsSheet } from "@/components/HabitDialogs";
+import { ButtonWheel } from "@/components/WheelSpinner";
 
 type Filter = "open" | "done" | "all";
 const PRIORITY_TONE = { high: "red", medium: "amber", low: "blue" } as const;
@@ -24,14 +28,21 @@ const UP_PAGE = 10;
 const RANK: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
 /** `neet` = the signed-in user is preparing for NEET: task titles then also search the NEET syllabus and NCERT chapters. */
-export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = false, cse = false, onDueNow, onOpenCalendar }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; neet?: boolean; /** A software engineer (CSE): the Contests menu is shown. */ cse?: boolean; onDueNow?: (n: number) => void; onOpenCalendar?: () => void }) {
+export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, onOpenGoals, neet = false, cse = false, onDueNow, onOpenCalendar }: { onChanged: () => void; refreshKey?: number; onOpenHabits?: () => void; /** Opens the Goals page (a tap on a weekly goal). */ onOpenGoals?: () => void; neet?: boolean; /** A software engineer (CSE): the Contests menu is shown. */ cse?: boolean; onDueNow?: (n: number) => void; onOpenCalendar?: () => void }) {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
   const [editing, setEditing] = useState<Task | null>(null);
   const [logging, setLogging] = useState<Task | null>(null);
+  /** The goals (cached): their names for the small 🎯 line on a task, and this week's goals above the list. */
+  const [goals, setGoals] = useState<Goal[]>([]);
+  useEffect(() => { goalsApi.list().then(setGoals, () => undefined); }, [refreshKey]);
+  const goalNames = useMemo(() => new Map(goals.map((x) => [x.id, x.title])), [goals]);
+  const weekGoals = goals.filter((g) => g.period === "week" && g.status === "open").sort((a, b) => a.dueDay.localeCompare(b.dueDay));
   /** Notes open for this task (the same popup as the option wheel). */
   const [notesFor, setNotesFor] = useState<{ task: Task; view: boolean } | null>(null);
+  /** "Link to goals" open for this task: tick any number of goals. */
+  const [linkFor, setLinkFor] = useState<Task | null>(null);
   /** Time spent today on the option wheel: the task and what is logged today so far. */
   const [spentFor, setSpentFor] = useState<{ task: Task; today: number } | null>(null);
   async function openSpent(t: Task) {
@@ -217,6 +228,12 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
 
       {error && <p className="text-sm text-accent-extreme" role="alert">{error}</p>}
       {tasks === null && !error && <PanelLoader label="Loading tasks" />}
+      {/* This week's goals, just above the tasks (not under Done). */}
+      {/* Shown only when there are goals this week (nothing at all otherwise). */}
+      {tasks !== null && filter !== "done" && weekGoals.length > 0 && (
+        <WeekGoals goals={weekGoals} total={goals.filter((g) => g.status === "open").length} onChanged={() => { void goalsApi.list().then(setGoals, () => undefined); onChanged(); }}
+          onReach={async (g) => { const saved = await goalsApi.update(g.id, { status: "done" }); setGoals((l) => l.map((x) => (x.id === g.id ? saved : x))); onChanged(); }} />
+      )}
       {tasks !== null && groups.length === 0 && !showCal && <Empty>{filter === "done" ? "Nothing finished yet." : filter === "open" && upcomingCount > 0 ? `Nothing due today. ${upcomingCount} upcoming task${upcomingCount === 1 ? " is" : "s are"} under All.` : "No tasks yet. Tap + to add one. It also appears in your Pacewise calendar."}</Empty>}
 
       {groups.flatMap((g, i) => [
@@ -230,7 +247,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           </h2>
           <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
             {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
-              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} coins={earned.get(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
+              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} coins={earned.get(t.id)} goal={taskGoalIds(t).map((id) => goalNames.get(id)).filter(Boolean).join(", ") || undefined} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
+                onLinkGoals={() => setLinkFor(t)}
                 onNotes={() => setNotesFor({ task: t, view: false })} onViewNotes={() => setNotesFor({ task: t, view: true })} onSpent={() => void openSpent(t)} />
             ))}
           </ul>
@@ -245,6 +263,10 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
       <AddButton onClick={() => setPlanning(true)} />
       {planning && <TaskPlanner neet={neet} contests={contestToggle || undefined} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
 
+      {linkFor && (
+        <LinkGoalsSheet task={linkFor} goals={goals} onClose={() => setLinkFor(null)}
+          onSave={async (ids) => { replace(await todoApi.update(linkFor.id, { goalIds: ids })); void goalsApi.list().then(setGoals, () => undefined); onChanged(); }} />
+      )}
       {notesFor && (
         <NotesPopup title={`${notesFor.view ? "Notes" : "Add note"} · ${notesFor.task.title}`} value={notesFor.task.notes ?? ""} readOnly={notesFor.view} onClose={() => setNotesFor(null)}
           onSave={async (notes) => { replace(await todoApi.update(notesFor.task.id, { notes })); onChanged(); }} />
@@ -275,7 +297,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   );
 }
 
-function TaskRow({ task: t, celebrating = false, coins, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void; /** Coins the server paid for finishing it just now. */ coins?: number }) {
+function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void; /** Coins the server paid for finishing it just now. */ coins?: number; /** The goal it counts toward. */ goal?: string; /** Link to goals (any number). */ onLinkGoals: () => void }) {
   const done = t.status === "done" || celebrating;
   /** Past days are read-only: no ticking, logging, editing or deleting. */
   const locked = lockedProblem(t, today());
@@ -302,12 +324,13 @@ function TaskRow({ task: t, celebrating = false, coins, onToggle, onEdit, onLog,
           {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
             <Badge tone={PRIORITY_TONE[t.priority]} className="rounded-full">{t.priority}</Badge>
+            {goal && <span className="flex min-w-0 max-w-full items-center gap-1 text-ink-muted" title={`Counts toward: ${goal}`}><Target className="h-3 w-3 shrink-0 text-[#FF9500]" aria-hidden /><span className="truncate">{goal}</span></span>}
             {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
             {done && t.completedDay && <span>finished {rangeLabel(t.completedDay, t.completedDay).toLowerCase()}</span>}
             {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
           </div>
         </div>
-        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} onViewNotes={t.notes?.trim() ? onViewNotes : undefined} />}
+        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} onLinkGoals={onLinkGoals} onViewNotes={t.notes?.trim() ? onViewNotes : undefined} />}
       </div>
 
       <div className="hidden items-start gap-4 px-4 py-4 sm:px-5 md:flex">
@@ -321,6 +344,7 @@ function TaskRow({ task: t, celebrating = false, coins, onToggle, onEdit, onLog,
         {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
           <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
+          {goal && <span className="flex min-w-0 max-w-full items-center gap-1 text-ink-muted" title={`Counts toward: ${goal}`}><Target className="h-3 w-3 shrink-0 text-[#FF9500]" aria-hidden /><span className="truncate">{goal}</span></span>}
           {locked ? <span>{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</span>
             : <button type="button" onClick={onSpent} title="Set the time spent" className="rounded px-1 -mx-1 underline-offset-2 transition-colors hover:text-ink-muted hover:underline">{whenLabel(t.startDay, t.dueDay, t.startTime, t.endTime)}</button>}
           {(t.loggedMinutes ?? 0) > 0 && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{duration(t.loggedMinutes ?? 0)}</span>}
@@ -332,11 +356,154 @@ function TaskRow({ task: t, celebrating = false, coins, onToggle, onEdit, onLog,
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
         <Button size="sm" variant="ghost" onClick={onNotes} aria-label="Add note" title="Add note"><NotebookPen className="h-4 w-4" /></Button>
         {t.notes?.trim() && <Button size="sm" variant="ghost" onClick={onViewNotes} aria-label="View notes" title="View notes"><Eye className="h-4 w-4" /></Button>}
+        <Button size="sm" variant="ghost" onClick={onLinkGoals} aria-label="Link to goals" title="Link to goals"><Target className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onDelete} aria-label="Delete"><Trash2 className="h-4 w-4" /></Button>
       </div>}
       </div>
     </li>
+  );
+}
+
+/**
+ * Link to goals: every goal in progress (and any already linked) as a checklist; tick as many as this task serves.
+ * Each linked goal counts the task in its progress, report and Goal review.
+ */
+function LinkGoalsSheet({ task, goals, onClose, onSave }: { task: Task; goals: Goal[]; onClose: () => void; onSave: (ids: string[]) => Promise<void> }) {
+  const [ids, setIds] = useState<string[]>(taskGoalIds(task));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const list = goals.filter((g) => g.status === "open" || ids.includes(g.id)).sort((a, b) => a.dueDay.localeCompare(b.dueDay));
+  const toggle = (id: string) => setIds((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
+  async function save() {
+    setBusy(true); setError(null);
+    try { await onSave(ids); onClose(); } catch (e) { setError(e instanceof Error ? e.message : "Could not link the goals."); setBusy(false); }
+  }
+  return (
+    <SettingsSheet label="Link to goals" onClose={onClose}>
+      <p className="-mt-1 mb-5 px-1 text-[15px] text-ink-muted">“{task.title}” counts toward every goal you tick.</p>
+      {list.length === 0 ? (
+        <p className="pw-group mb-6 rounded-[14px] px-4 py-3.5 text-[15px] text-ink-faint">No goals yet. Add one in More → New goal.</p>
+      ) : (
+        <ul className="pw-group mb-2 overflow-hidden rounded-[14px]">
+          {list.map((g, i) => {
+            const on = ids.includes(g.id);
+            return (
+              <li key={g.id}>
+                <button type="button" onClick={() => toggle(g.id)} aria-pressed={on} className="flex w-full items-center gap-3 pl-4 text-left transition-colors active:bg-overlay/[0.06]">
+                  <span className={cn("grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors", on ? "border-[#3478F6] bg-[#3478F6] text-white" : "border-overlay/25")}>
+                    {on && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                  </span>
+                  <span className={cn("flex min-w-0 flex-1 items-center gap-3 py-3 pr-4", i > 0 && "border-t border-overlay/10")}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[16px] text-ink">{g.title}</span>
+                      <span className="block truncate text-[13px] text-ink-muted">{periodLabel(g.period)} · {g.status === "done" ? "reached" : deadlineLabel(g).text}</span>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="mb-6 px-4 text-[13px] text-ink-muted">{ids.length === 0 ? "Not linked to any goal." : `Linked to ${ids.length} goal${ids.length === 1 ? "" : "s"}.`}</p>
+      {error && <p className="-mt-3 mb-5 px-4 text-[15px] text-accent-extreme" role="alert">{error}</p>}
+      <div className="flex gap-3">
+        <button type="button" onClick={onClose} disabled={busy} className="h-12 flex-1 rounded-full bg-overlay/[0.08] text-[17px] font-medium text-ink transition-transform active:scale-[0.98] disabled:opacity-40">Cancel</button>
+        <button type="button" onClick={() => void save()} disabled={busy}
+          className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#3478F6] text-[17px] font-semibold text-white transition-transform active:scale-[0.98] disabled:opacity-40">
+          {busy ? <ButtonWheel /> : <Check className="h-[18px] w-[18px]" strokeWidth={2.5} />}{busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </SettingsSheet>
+  );
+}
+
+/**
+ * This week's goals above the task list. Each card: a round tick to mark it reached right here, the name, the deadline
+ * and the days left, its tasks, and a progress ring. "All goals" at the bottom opens every goal (weekly, monthly,
+ * quarterly, yearly, long-term) in a sheet, to add, reach, edit or delete them.
+ */
+function WeekGoals({ goals, total, onReach, onChanged }: { goals: Goal[]; total: number; onReach: (g: Goal) => Promise<void>; onChanged: () => void }) {
+  const [all, setAll] = useState(false);
+  /** Ticked just now: shown checked for a moment, then it leaves the list. */
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const reach = async (g: Goal) => {
+    if (leaving.has(g.id)) return;
+    setLeaving((s) => new Set(s).add(g.id));
+    try { navigator.vibrate?.(12); } catch { /* not supported */ }
+    await Promise.all([onReach(g), new Promise((r) => setTimeout(r, 650))]).catch(() => undefined);
+    setLeaving((s) => { const n = new Set(s); n.delete(g.id); return n; });
+  };
+  return (
+    <section>
+      <h2 className="mb-3 flex items-center justify-between gap-3 text-sm uppercase tracking-wide text-ink-muted">
+        <span className="text-lg font-medium normal-case tracking-normal text-ink md:hidden">This week's goals <span className="text-sm font-normal text-ink-faint">{goals.length}</span></span>
+        <span className="hidden md:inline">This week's goals · {goals.length}</span>
+      </h2>
+      {goals.length > 0 && (
+        <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
+          {goals.map((g) => {
+            const { total: n, done } = g.tasks;
+            const pct = n ? Math.round((done / n) * 100) : 0;
+            const d = deadlineLabel(g);
+            const ticked = leaving.has(g.id);
+            return (
+              <li key={g.id} className={cn(ticked && "task-done-out")}>
+                <div className="pw-card flex items-center gap-3.5 rounded-[24px] bg-canvas-raised px-4 py-3.5 md:rounded-none md:bg-transparent md:px-5 md:py-4">
+                  <button type="button" onClick={() => void reach(g)} aria-label={`Mark “${g.title}” as reached`} title="Mark as reached"
+                    className={cn("grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200", ticked ? "border-accent-medium bg-accent-medium text-white" : "border-overlay/25 hover:border-accent-medium/60")}>
+                    {ticked && <Check className="check-pop h-4 w-4" strokeWidth={3} />}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("truncate text-[16px] font-medium leading-snug tracking-[-0.01em]", ticked ? "text-ink-faint line-through" : "text-ink")}>{g.title}</p>
+                    <p className="mt-0.5 truncate text-[13px] text-ink-muted">
+                      {shortDue(g.dueDay)} · <span className={cn("font-medium", d.tone === "late" ? "text-accent-extreme" : d.tone === "soon" ? "text-accent-fast" : "text-ink-muted")}>{d.text}</span>
+                    </p>
+                    <p className="mt-0.5 truncate text-[12px] text-ink-faint">{n ? `${done} of ${n} task${n === 1 ? "" : "s"} done` : "No tasks linked yet"}</p>
+                  </div>
+                  <ProgressRing pct={ticked ? 100 : pct} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {/* Every goal, of every horizon: the same round pill as "All habits". */}
+      <div className="mt-3 flex justify-end">
+        <button type="button" onClick={() => setAll(true)} aria-label={`All goals: ${total} in progress`}
+          className="pw-circle-btn inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium tabular-nums text-ink active:scale-95">
+          {total} in progress <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      {all && (
+        <SettingsSheet label="Goals" onClose={() => { setAll(false); onChanged(); }}>
+          <GoalsPanel version={0} onChanged={onChanged} />
+        </SettingsSheet>
+      )}
+    </section>
+  );
+}
+
+/** "Due Sun 29 Nov" (with the year when it is not this year). */
+const shortDue = (day: string) => {
+  const d = new Date(day + "T12:00");
+  return `Due ${d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", ...(d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) })}`;
+};
+
+/** A small progress ring with the percentage inside (green when complete). */
+function ProgressRing({ pct, size = 44 }: { pct: number; size?: number }) {
+  const r = (size - 6) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }} role="img" aria-label={`${pct}% done`}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={4} className="stroke-overlay/10" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={4} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)}
+          className={cn("transition-[stroke-dashoffset] duration-500", pct >= 100 ? "stroke-accent-medium" : "stroke-[#FF9500]")} />
+      </svg>
+      <span className="absolute text-[11px] font-semibold tabular-nums text-ink">{pct}%</span>
+    </span>
   );
 }
 
@@ -400,7 +567,7 @@ function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: Cale
 }
 
 /** Phones: the ⋯ on a task card, with Add note (and View notes when there are some), Log time, Edit and Delete. */
-function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void; onViewNotes?: () => void }) {
+function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes, onLinkGoals }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void; onViewNotes?: () => void; onLinkGoals: () => void }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -412,8 +579,8 @@ function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes }: { onLog: ()
       {open && (
         <DropdownMenu soft anchor={trigger} label="Task actions" value="" minWidth={200}
           ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
-          groups={[{ title: "", items: [{ id: "notes", label: "Add note", icon: NotebookPen }, ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []), { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
-          onSelect={(id) => (id === "notes" ? onNotes() : id === "view" ? onViewNotes?.() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
+          groups={[{ title: "", items: [{ id: "notes", label: "Add note", icon: NotebookPen }, ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []), { id: "goals", label: "Link to goals", icon: Target }, { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
+          onSelect={(id) => (id === "notes" ? onNotes() : id === "view" ? onViewNotes?.() : id === "goals" ? onLinkGoals() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}
     </>
   );

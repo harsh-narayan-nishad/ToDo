@@ -17,7 +17,7 @@ export const CACHE_MS = 6 * 60 * 60 * 1000;
  * Reads that are cached: the signed-in account, tasks, habits and check-ins, profile, history, entries, the calendar,
  * the gold-coin wallet, and the contest sync (which the server also runs when it is read: so it runs at most every 6 hours).
  */
-const CACHEABLE = [/^\/auth\/me$/, /^\/todo\/coins$/, /^\/todo\/contests$/, /^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
+const CACHEABLE = [/^\/auth\/me$/, /^\/todo\/goals$/, /^\/todo\/goals\/[^/]+\/report$/, /^\/todo\/coins$/, /^\/todo\/contests$/, /^\/todo\/tasks$/, /^\/todo\/habits$/, /^\/todo\/habits\/entries$/, /^\/todo\/summary$/, /^\/todo\/logs$/, /^\/todo\/days\/[^/]+$/, /^\/todo\/entries$/, /^\/calendar\/events$/];
 export const cacheable = (path: string) => CACHEABLE.some((r) => r.test(path));
 
 interface Slot { at: number; day: string; data: string }
@@ -121,6 +121,8 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
     drop((k) => derived(k) || pathOf(k) === "/calendar/events");
     // Finishing or reopening a task earns or takes back gold coins: the wallet is read again next time it is shown.
     if (b.status !== undefined) drop((k) => pathOf(k) === "/todo/coins");
+    // Goals count their tasks (added, finished, linked, deleted, time logged): their progress and reports are read again next time.
+    drop((k) => pathOf(k).startsWith("/todo/goals"));
     return;
   }
 
@@ -161,6 +163,19 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
     return;
   }
 
+  // ---- goals: the server's reply updates the cached list in place; deleting one also unlinks its tasks ----
+  if (path.startsWith("/todo/goals")) {
+    const goals = (k: string) => pathOf(k) === "/todo/goals";
+    if (method === "POST" && result) edit<WithId>(goals, (l) => upsert(l, result as WithId));
+    else if ((m = path.match(/^\/todo\/goals\/([^/]+)$/))) {
+      const id = decodeURIComponent(m[1]);
+      if (method === "PATCH" && result) edit<WithId>(goals, (l) => upsert(l, result as WithId));
+      else if (method === "DELETE") { edit<WithId>(goals, (l) => l.filter((x) => x.id !== id)); drop((k) => pathOf(k) === "/todo/tasks"); }
+      drop((k) => pathOf(k) === `/todo/goals/${encodeURIComponent(id)}/report` || pathOf(k) === `/todo/goals/${id}/report`);
+    } else drop(goals);
+    return;
+  }
+
   // Gold coins: buying Premium answers with the new wallet, which replaces the cached one (nothing else changes).
   if (path.startsWith("/todo/coins")) {
     if (result) replace((k) => pathOf(k) === "/todo/coins", result); else drop((k) => pathOf(k) === "/todo/coins");
@@ -168,7 +183,7 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
   }
 
   // Logged time removed, or anything else: whatever it touches is read again next time.
-  if (path.startsWith("/todo/logs")) { drop((k) => derived(k) || pathOf(k) === "/todo/tasks" || pathOf(k) === "/calendar/events"); return; }
+  if (path.startsWith("/todo/logs")) { drop((k) => derived(k) || pathOf(k) === "/todo/tasks" || pathOf(k) === "/calendar/events" || pathOf(k).startsWith("/todo/goals")); return; }
   if (path.startsWith("/todo") || path.startsWith("/calendar")) drop((k) => k.startsWith("/todo") || k.startsWith("/calendar"));
 }
 

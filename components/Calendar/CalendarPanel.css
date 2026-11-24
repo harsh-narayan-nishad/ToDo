@@ -1056,3 +1056,19 @@
   .pw-calendar .rbc-time-view .rbc-header { padding: 0.45rem 0.1rem; text-align: center; font-size: 0.78rem; line-height: 1.2; white-space: normal; overflow: visible; text-overflow: clip; }
   .pw-calendar .rbc-time-view .rbc-header .rbc-button-link { padding: 2px 0; white-space: normal; }
 }
+
+/* Year view: a day a goal was reached on gets a thin green ring and a green dot (beside the grey events dot, if any). */
+.pw-calendar .pw-year__day.has-goal { box-shadow: inset 0 0 0 1.5px rgba(52, 199, 89, 0.9); }
+.pw-calendar .pw-year__day.has-goal::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 9999px;
+  background: #34C759;
+}
+.pw-calendar .pw-year__day.has-goal.has-events::before { margin-left: 1px; }
+.pw-calendar .pw-year__day.has-goal.has-events::after { margin-left: -5px; }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, Check, X } from "lucide-react";
+import { CalendarRange, Check, Plus, X } from "lucide-react";
 import LiquidGlass from "@/components/LiquidGlass";
 import { GlassButton } from "@/components/GlassButton";
 import { TaskSheet, blankRow, findClashes, type SheetRow } from "@/components/TaskSheet";
@@ -15,6 +15,8 @@ import { GlassDropdown } from "@/components/GlassDropdown";
 import { INTERVALS, MAX_RANGE_DAYS, PATTERNS, planDays, repeatLabel, span, weekday, type Repeat } from "@/lib/repeat";
 import { ButtonWheel } from "@/components/WheelSpinner";
 import { ClockPopup } from "@/components/TaskDialogs";
+import { goalsApi, periodLabel, type Goal } from "@/lib/goals";
+import { GoalSheet } from "@/components/GoalsPanel";
 
 /**
  * The task planner: several tasks over many days in one go — a week of workouts, a month of revision,
@@ -63,6 +65,12 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
   const [from, setFrom] = useState(draft?.from ?? now);
   const [to, setTo] = useState(draft?.to ?? addDays(now, 6));
   const [repeat, setRepeat] = useState<Repeat>(draft?.repeat ?? "daily");
+  /** The goal every task in this plan counts toward ("" = none), from the person's goals still in progress. */
+  const [goalId, setGoalId] = useState("");
+  const [goals, setGoals] = useState<Goal[]>([]);
+  /** "New goal…" in the Goal menu: the goal sheet, right here; the new goal is then picked for this plan. */
+  const [newGoal, setNewGoal] = useState(false);
+  useEffect(() => { goalsApi.list().then((g) => setGoals(g.filter((x) => x.status === "open")), () => undefined); }, []);
   const [picked, setPicked] = useState<boolean[]>(draft?.picked?.length === 7 ? draft.picked : [true, false, true, false, true, false, false]);
   const [rows, setRows] = useState<SheetRow[]>(() => draft ? draft.rows.map((r) => { const b = blankRow(); return { ...b, ...r, key: b.key }; }) : [blankRow(), blankRow(), blankRow()]);
   /** Saved on every change; nothing is kept while every row is empty. */
@@ -81,7 +89,8 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
   const preset = quick.find((p) => p.from === from && p.to === to);
 
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // Esc in the New goal sheet on top closes only that sheet, not the planner.
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector('[role="dialog"][aria-label="New goal"]')) onClose(); };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
@@ -121,7 +130,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
     setBusy(true);
     setError(null);
     try {
-      const task = (r: SheetRow, day: string) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startDay: day, dueDay: day, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime });
+      const task = (r: SheetRow, day: string) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startDay: day, dueDay: day, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime, goalId: r.goalId || goalId || null });
       const tasks = [...repeating.flatMap((r) => daysFor(r).map((day) => task(r, day))), ...dated.map((r) => task(r, r.day))].sort((x, y) => x.startDay.localeCompare(y.startDay));
       // The tour's practice task: made on this screen only (never saved), so the tour always works.
       if (tourState.virtual) {
@@ -192,6 +201,19 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
                       onSelect={(id) => setRepeat(id as Repeat)} />
                   </div>
                 </div>
+                {/* Optional: the goal (weekly, monthly, quarterly, yearly) every task in this plan counts toward. */}
+                <div>
+                  <p className={cn(LABEL, "mb-2")}>Goal (optional)</p>
+                  <GlassDropdown label="Goal" value={goalId} display={goals.find((g) => g.id === goalId)?.title ?? "No goal"}
+                    groups={[
+                      { title: "", items: [{ id: "", label: "No goal" }] },
+                      ...(goals.length ? [{ title: "Your goals", items: goals.map((g) => ({ id: g.id, label: g.title, meta: periodLabel(g.period) })) }] : []),
+                      { title: "", items: [{ id: "__new", label: "New goal…", icon: Plus }] },
+                    ]}
+                    onSelect={(id) => (id === "__new" ? setNewGoal(true) : setGoalId(id))} />
+                  {goals.length === 0 && <p className="mt-2 text-xs text-ink-faint">No goals yet: pick “New goal…” to set a weekly, monthly, quarterly or yearly one.</p>}
+                  {newGoal && <GoalSheet onClose={() => setNewGoal(false)} onSaved={(g) => { setGoals((l) => [...l, g]); setGoalId(g.id); }} />}
+                </div>
                 {repeat === "custom" && (
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Days of the week">
                     {WEEKDAYS.map((w, i) => (
@@ -209,6 +231,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
               {/* 2. Tasks */}
               <Section n={2} title="Tasks">
                 <TaskSheet rows={rows} setRows={setRows} clashes={clashes.keys} neet={neet} planRepeat={repeatLabel(repeat)} toolbar={contests}
+                  goals={goals.map((g) => ({ id: g.id, title: g.title, period: periodLabel(g.period) }))} planGoal={goals.find((g) => g.id === goalId)?.title ?? "No goal"}
                   onImportPlan={(p) => {
                     const f = p.from ?? from;
                     if (p.from) setFrom(p.from);

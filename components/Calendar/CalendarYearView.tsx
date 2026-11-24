@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { goalsApi } from "@/lib/goals";
 
 /** The whole year at a glance: twelve small months. Click a day to open it, click a month name to open that month. */
 interface YearEvent { start: Date; end: Date }
@@ -28,6 +29,22 @@ function YearViewImpl({ date, events, localizer, culture, onDrillDown }: YearVie
     if (e.end.getHours() === 0 && e.end.getMinutes() === 0 && last > d) last.setDate(last.getDate() - 1);
     for (let guard = 0; d <= last && guard < 400; guard += 1) { busy.add(dayKey(d)); d.setDate(d.getDate() + 1); }
   }
+  // Days a goal was reached on (from the cached goals): a green dot and ring, and the goals' names on hover.
+  const [reached, setReached] = React.useState<Map<string, string[]>>(new Map());
+  React.useEffect(() => {
+    let on = true;
+    goalsApi.list().then((list) => {
+      const m = new Map<string, string[]>();
+      for (const g of list) {
+        if (g.status !== "done" || !g.completedDay) continue;
+        const [y, mo, d] = g.completedDay.split("-").map(Number);
+        const k = dayKey(new Date(y, mo - 1, d));
+        m.set(k, [...(m.get(k) ?? []), g.title]);
+      }
+      if (on) setReached(m);
+    }, () => undefined);
+    return () => { on = false; };
+  }, []);
   const today = dayKey(new Date());
   const now = new Date();
   const thisYear = year === now.getFullYear();
@@ -58,13 +75,15 @@ function YearViewImpl({ date, events, localizer, culture, onDrillDown }: YearVie
                 if (d === null) return <span key={`e${i}`} />;
                 const cell = new Date(year, m, d);
                 const k = dayKey(cell);
+                const goals = reached.get(k);
                 return (
                   <button
                     key={k}
                     type="button"
                     onClick={() => onDrillDown(cell, "day")}
-                    className={`pw-year__day${k === today ? " is-today" : ""}${busy.has(k) ? " has-events" : ""}`}
-                    aria-label={`${localizer.format(cell, "dddd D MMMM YYYY", culture)}${busy.has(k) ? ", has events" : ""}`}
+                    title={goals ? `Goal reached: ${goals.join(", ")}` : undefined}
+                    className={`pw-year__day${k === today ? " is-today" : ""}${busy.has(k) ? " has-events" : ""}${goals ? " has-goal" : ""}`}
+                    aria-label={`${localizer.format(cell, "dddd D MMMM YYYY", culture)}${busy.has(k) ? ", has events" : ""}${goals ? `, goal reached: ${goals.join(", ")}` : ""}`}
                   >
                     {d}
                   </button>

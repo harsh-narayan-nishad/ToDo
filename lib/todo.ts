@@ -24,6 +24,10 @@ export interface Task {
   loggedMinutes?: number;
   /** Gold coins this finish earned (0 when open, or past the day's limit). */
   coins?: number;
+  /** The goal this task counts toward (lib/goals.ts), or null. */
+  goalId?: string | null;
+  /** Every goal it counts toward (a task can serve several); goalId is the first of them. */
+  goalIds?: string[];
 }
 
 export interface WorkLog { id: string; taskId: string; taskTitle: string; day: string; minutes: number; note: string; startTime: string | null; createdAt: string }
@@ -52,7 +56,7 @@ export interface DayDetail { day: string; minutes: number; created: Task[]; comp
 /** A task title this person has added before (one per title), with what it was last added with. */
 export interface Entry { id: string; title: string; notes: string; priority: Priority; startTime: string | null; endTime: string | null; created: number; done: number; lastUsedAt: string }
 
-export interface TaskInput { title: string; notes: string; priority: Priority; startDay: string; dueDay: string; startTime: string | null; endTime: string | null }
+export interface TaskInput { title: string; notes: string; priority: Priority; startDay: string; dueDay: string; startTime: string | null; endTime: string | null; /** The goal it counts toward. */ goalId?: string | null }
 
 /** Every write sends the user's own day and time-zone offset; see backend/src/modules/todo. */
 const stamp = () => ({ today: today(), tzOffset: tzOffset() });
@@ -60,7 +64,7 @@ const stamp = () => ({ today: today(), tzOffset: tzOffset() });
 export const todoApi = {
   tasks: () => api<Task[]>("/todo/tasks"),
   create: (input: TaskInput) => api<Task>("/todo/tasks", { method: "POST", body: { ...input, ...stamp() } }),
-  update: (id: string, patch: Partial<TaskInput> & { status?: Task["status"] }) =>
+  update: (id: string, patch: Partial<TaskInput> & { status?: Task["status"]; goalIds?: string[] }) =>
     api<Task>(`/todo/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: { ...patch, ...stamp() } }),
   remove: (id: string) => api<void>(`/todo/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** `startTime` ("HH:MM") is optional; with it the work also appears as a block in the Pacewise calendar. */
@@ -101,3 +105,6 @@ export async function createBulk(tasks: TaskInput[]): Promise<BulkResult> {
   }
   return result;
 }
+
+/** All the goals a task counts toward (its list, and its single goal from before there were lists). */
+export const taskGoalIds = (t: Pick<Task, "goalId" | "goalIds">): string[] => [...new Set([...(t.goalId ? [t.goalId] : []), ...(t.goalIds ?? [])])];
