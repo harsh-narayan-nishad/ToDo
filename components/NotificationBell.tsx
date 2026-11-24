@@ -109,6 +109,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
   const update = (next: { read: string[]; gone: string[] }) => { setSeen(next); saveSeen(next); };
   const markAll = () => update({ ...seen, read: [...new Set([...seen.read, ...notes.map((n) => n.id)])] });
   const clear = (id: string) => update({ read: seen.read, gone: [...seen.gone, id] });
+  const clearAll = () => update({ read: seen.read, gone: [...new Set([...seen.gone, ...notes.map((n) => n.id)])] });
 
   const place = () => {
     const r = button.current?.getBoundingClientRect();
@@ -160,20 +161,27 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
         // A bold title, and each notification on its own card.
         <div ref={panel} data-tour="alerts-panel" role="dialog" aria-label="Notifications" className="pw-notif-backdrop glass-in fixed z-[120] overflow-hidden rounded-[26px] p-2.5 shadow-themed"
           style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}>
-          <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2.5 pt-1">
             <span className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Notifications</span>
-            {unread > 0 && (
-              <button type="button" onClick={markAll} className="pw-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-ink-muted active:scale-95">
-                <CheckCheck className="h-3.5 w-3.5" /> Mark all read
-              </button>
-            )}
+            <span className="flex items-center gap-1.5">
+              {unread > 0 && (
+                <button type="button" onClick={markAll} className="pw-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-ink-muted active:scale-95">
+                  <CheckCheck className="h-3.5 w-3.5" /> Mark all read
+                </button>
+              )}
+              {notes.length > 0 && (
+                <button type="button" onClick={clearAll} className="pw-notif flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium text-[#F2453D] active:scale-95">
+                  <X className="h-3.5 w-3.5" strokeWidth={2.5} /> Clear all
+                </button>
+              )}
+            </span>
           </div>
           <div className="flex max-h-[min(26rem,70vh)] flex-col gap-2 overflow-y-auto">
             {notes.length === 0 ? <p className="pw-notif rounded-[18px] px-4 py-6 text-center text-[15px] text-ink-muted">You're all caught up.</p> : notes.map((n) => {
               const Icon = n.icon;
               const read = seen.read.includes(n.id);
               return (
-                <div key={n.id} className={cn("pw-notif relative flex items-start gap-3 rounded-[18px] p-3 pr-10 transition-opacity", read && "opacity-70")}>
+                <SwipeToClear key={n.id} onClear={() => clear(n.id)} className={cn("pw-notif relative flex items-start gap-3 rounded-[18px] p-3 pr-10", read && "opacity-70")}>
                   <button type="button" onClick={() => { update({ ...seen, read: [...new Set([...seen.read, n.id])] }); setOpen(false); onNavigate(n.tab); }} className="flex min-w-0 flex-1 items-start gap-3 text-left">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-white" style={{ backgroundColor: TILE[n.tone] }}><Icon className="h-[18px] w-[18px]" strokeWidth={2} /></span>
                     <span className="min-w-0 flex-1">
@@ -184,7 +192,7 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
                   </button>
                   <button type="button" onClick={() => clear(n.id)} aria-label="Clear notification"
                     className="absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full bg-overlay/10 text-ink-muted active:scale-95"><X className="h-3 w-3" strokeWidth={2.5} /></button>
-                </div>
+                </SwipeToClear>
               );
             })}
           </div>
@@ -193,5 +201,63 @@ export function NotificationBell({ refreshKey, onNavigate, tab = false }: { refr
         document.body,
       )}
     </>
+  );
+}
+
+/**
+ * A notification card that is swiped away to clear it: drag it left or right past about a third of its width and it
+ * slides off; less, and it springs back. Up and down still scroll the list, and a swipe never counts as a tap.
+ */
+function SwipeToClear({ onClear, className, children }: { onClear: () => void; className?: string; children: React.ReactNode }) {
+  const el = useRef<HTMLDivElement>(null);
+  const g = useRef<{ x: number; y: number; dx: number; lock: "x" | "y" | null } | null>(null);
+  const swiped = useRef(false);
+  const style = (transform: string, opacity: string, ms: number) => {
+    const s = el.current?.style;
+    if (!s) return;
+    s.transition = ms ? `transform ${ms}ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity ${ms}ms ease-out` : "none";
+    s.transform = transform;
+    s.opacity = opacity;
+  };
+  const end = () => {
+    const s = g.current;
+    g.current = null;
+    if (!s || s.lock !== "x") return;
+    const w = el.current?.offsetWidth ?? 300;
+    if (Math.abs(s.dx) > w * 0.3) {
+      style(`translateX(${Math.sign(s.dx) * w * 1.15}px)`, "0", 200);
+      try { navigator.vibrate?.(8); } catch { /* not supported */ }
+      window.setTimeout(onClear, 190);
+    } else style("", "", 220);
+  };
+  return (
+    <div ref={el} className={className} style={{ touchAction: "pan-y" }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        g.current = { x: e.clientX, y: e.clientY, dx: 0, lock: null };
+        swiped.current = false;
+      }}
+      onPointerMove={(e) => {
+        const s = g.current;
+        if (!s) return;
+        const dx = e.clientX - s.x;
+        const dy = e.clientY - s.y;
+        if (!s.lock) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+          s.lock = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          if (s.lock === "x") el.current?.setPointerCapture(e.pointerId);
+        }
+        if (s.lock !== "x") return;
+        swiped.current = true;
+        s.dx = dx;
+        const w = el.current?.offsetWidth ?? 300;
+        style(`translateX(${dx}px)`, String(1 - Math.min(Math.abs(dx) / w, 1) * 0.6), 0);
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      // a swipe is not a tap: the card's buttons do not fire after one
+      onClickCapture={(e) => { if (swiped.current) { e.stopPropagation(); e.preventDefault(); swiped.current = false; } }}>
+      {children}
+    </div>
   );
 }

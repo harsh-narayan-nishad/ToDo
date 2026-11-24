@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { PanelLoader } from "@/components/WheelSpinner";
-import { Flame } from "lucide-react";
+import { Crown, Flame } from "lucide-react";
 import { Card, Stat } from "@/components/ui";
+import { GoldCoin } from "@/components/GoldCoin";
+import { ButtonWheel } from "@/components/WheelSpinner";
+import { coinsApi, isPremium, useWallet, type CoinTxn, type Wallet } from "@/lib/coins";
 import { Heatmap } from "@/components/Heatmap";
 import type { User } from "@/lib/api";
 import { dayLabel, duration, longDay } from "@/lib/days";
@@ -13,6 +16,7 @@ import { cn } from "@/lib/utils";
 export function ProfilePanel({ user, version, onOpenDay }: { user: User; version: number; onOpenDay: (day: string) => void }) {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const coins = useWallet(version);
 
   useEffect(() => {
     todoApi.summary().then((s) => { setData(s); setError(null); }, (e) => setError(e instanceof Error ? e.message : "Could not load your profile."));
@@ -34,7 +38,22 @@ export function ProfilePanel({ user, version, onOpenDay }: { user: User; version
             <p className="text-sm text-ink-muted">@{user.username}</p>
           </div>
         </div>
+        {/* Gold coins (the server's wallet) and Premium. */}
+        {coins.wallet && (
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+            {isPremium(coins.wallet) && <PremiumBadge />}
+            <div className="pw-coin flex items-center gap-3 rounded-full py-1.5 pl-1.5 pr-4" title={`${coins.wallet.rules.perTask} gold coins for every finished task`}>
+              <GoldCoin size={34} />
+              <span>
+                <span className="block pw-coin-value text-xl font-semibold tabular-nums leading-tight">{coins.wallet.balance.toLocaleString()}</span>
+                <span className="block pw-coin-note text-[11px] leading-tight">gold coins</span>
+              </span>
+            </div>
+          </div>
+        )}
       </Card>
+
+      {coins.wallet ? <CoinsCard wallet={coins.wallet} onWallet={coins.setWallet} /> : coins.error && <p className="text-sm text-accent-extreme" role="alert">{coins.error}</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat className="pw-card" label="Tasks created" value={t.created} />
@@ -154,6 +173,103 @@ function WeekChart({ days, onOpenDay }: { days: HeatDay[]; onOpenDay: (day: stri
           <div className="flex items-center gap-1.5 text-ink-muted"><span className="h-2 w-2 rounded-full bg-accent-slow" aria-hidden />Time worked: {duration(hovered.d.minutes)}</div>
           <div className="flex items-center gap-1.5 text-ink-muted"><span className="h-2 w-2 rounded-full bg-[#5ED3D3]" aria-hidden />Tasks finished: {hovered.d.completed}</div>
           <div className="pl-3.5 text-ink-muted">Tasks added: {hovered.d.created}</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** The gold Premium badge. */
+function PremiumBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#F7C531] to-[#D99A0B] px-3 py-1.5 text-[13px] font-semibold text-[#3A2600] shadow-[0_1px_6px_rgba(217,154,11,0.35)]">
+      <Crown className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />Premium
+    </span>
+  );
+}
+
+const TXN_LABEL: Record<CoinTxn["kind"], string> = { welcome: "Welcome bonus", earn: "Task finished", revoke: "Task reopened", premium: "Premium" };
+
+/**
+ * The wallet, like a game's: the balance, today's coins against the daily limit, Premium (buy or extend it with
+ * coins, after a confirm), and the latest coins in and out. Every number comes from the server.
+ */
+function CoinsCard({ wallet: w, onWallet }: { wallet: Wallet; onWallet: (w: Wallet) => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const r = w.rules;
+  const premium = isPremium(w);
+  const short = Math.max(0, r.premiumPrice - w.balance);
+  const until = w.premiumUntil ? new Date(w.premiumUntil).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
+
+  async function buy() {
+    setBusy(true);
+    setError(null);
+    try { onWallet(await coinsApi.buyPremium()); setConfirm(false); } catch (e) { setError(e instanceof Error ? e.message : "Could not buy Premium."); } finally { setBusy(false); }
+  }
+
+  return (
+    <Card className="pw-card flex flex-col gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm uppercase tracking-wide text-ink-muted">Gold coins</h2>
+          <p className="mt-1 flex items-center gap-2 font-display text-4xl tabular-nums text-ink"><GoldCoin size={30} />{w.balance.toLocaleString()}</p>
+          <p className="mt-1 text-xs text-ink-faint">{r.perTask} coins for every finished task · up to {r.dailyCap} a day · reopening a task takes its coins back</p>
+        </div>
+        {premium ? (
+          <div className="text-right"><PremiumBadge /><p className="mt-1.5 text-xs text-ink-muted">until {until}</p></div>
+        ) : null}
+      </div>
+
+      {/* Today's coins against the daily limit. */}
+      <div>
+        <div className="mb-1.5 flex justify-between text-xs text-ink-muted"><span>Earned today</span><span className="tabular-nums">{w.earnedToday} / {r.dailyCap}</span></div>
+        <div className="h-2 overflow-hidden rounded-full bg-overlay/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#FFE680] to-[#D99A0B] transition-[width] duration-500" style={{ width: `${Math.min(100, (w.earnedToday / r.dailyCap) * 100)}%` }} />
+        </div>
+      </div>
+
+      {/* Premium, bought with coins. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-overlay/[0.04] p-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-ink"><Crown className="h-4 w-4 text-[#D99A0B]" aria-hidden />{premium ? "Extend Premium" : "Get Premium"}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            {r.premiumDays} days for {r.premiumPrice.toLocaleString()} coins{premium ? ", added after your current days" : ""}.{short > 0 ? ` ${short.toLocaleString()} more to go.` : ""}
+          </p>
+        </div>
+        {!confirm ? (
+          <button type="button" disabled={short > 0} onClick={() => { setConfirm(true); setError(null); }}
+            className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-b from-[#F7C531] to-[#D99A0B] px-5 text-sm font-semibold text-[#3A2600] transition-transform active:scale-[0.97] disabled:opacity-40">
+            <GoldCoin size={18} />{r.premiumPrice.toLocaleString()}
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setConfirm(false)} disabled={busy} className="h-10 rounded-full bg-overlay/[0.08] px-4 text-sm text-ink disabled:opacity-40">Cancel</button>
+            <button type="button" onClick={() => void buy()} disabled={busy} aria-busy={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-b from-[#F7C531] to-[#D99A0B] px-5 text-sm font-semibold text-[#3A2600] transition-transform active:scale-[0.97] disabled:opacity-80">
+              {busy ? <ButtonWheel /> : <GoldCoin size={18} />}{busy ? "Buying…" : `Spend ${r.premiumPrice.toLocaleString()}`}
+            </button>
+          </div>
+        )}
+        {error && <p className="w-full text-sm text-accent-extreme" role="alert">{error}</p>}
+      </div>
+
+      {/* The latest coins in and out. */}
+      {w.history.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-xs uppercase tracking-wide text-ink-muted">History</h3>
+          <ul className="flex flex-col divide-y divide-overlay/10">
+            {w.history.slice(0, 8).map((x) => (
+              <li key={x.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0">
+                  <span className="block truncate text-ink">{x.kind === "welcome" || x.kind === "premium" ? x.note || TXN_LABEL[x.kind] : TXN_LABEL[x.kind]}</span>
+                  <span className="block text-xs text-ink-faint">{dayLabel(x.day)}</span>
+                </span>
+                <span className={cn("shrink-0 font-semibold tabular-nums", x.amount > 0 ? "text-[#D99A0B]" : "text-ink-muted")}>{x.amount > 0 ? "+" : "−"}{Math.abs(x.amount).toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </Card>

@@ -22,6 +22,8 @@ export interface Task {
   completedDay: string | null;
   createdAt: string;
   loggedMinutes?: number;
+  /** Gold coins this finish earned (0 when open, or past the day's limit). */
+  coins?: number;
 }
 
 export interface WorkLog { id: string; taskId: string; taskTitle: string; day: string; minutes: number; note: string; startTime: string | null; createdAt: string }

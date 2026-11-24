@@ -16,6 +16,7 @@ import { taskCounts } from "@/components/CountCards";
 import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
 import { CONTEST_PLATFORMS, todoApi, type ContestPlatform, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { GoldCoin } from "@/components/GoldCoin";
 
 type Filter = "open" | "done" | "all";
 const PRIORITY_TONE = { high: "red", medium: "amber", low: "blue" } as const;
@@ -106,6 +107,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
 
   /** Tasks just ticked done: shown checked and sliding away for a moment before they move to Done. */
   const [celebrating, setCelebrating] = useState<Set<string>>(new Set());
+  /** Coins the server paid for a task just finished (shown in its "+10" while it slides away). */
+  const [earned, setEarned] = useState<Map<string, number>>(new Map());
   async function toggle(t: Task) {
     const status = t.status === "done" ? "open" : "done";
     if (status === "done") {
@@ -121,7 +124,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           await wait;
           setTasks((list) => (list ?? []).filter((x) => x.id !== t.id));
         } else {
-          const [saved] = await Promise.all([todoApi.update(t.id, { status }), wait]);
+          const req = todoApi.update(t.id, { status }).then((s) => { if (s.coins) setEarned((m) => new Map(m).set(t.id, s.coins!)); return s; });
+          const [saved] = await Promise.all([req, wait]);
           replace(saved);
         }
         onChanged();
@@ -226,7 +230,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
           </h2>
           <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
             {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
-              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
+              <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} coins={earned.get(t.id)} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
                 onNotes={() => setNotesFor({ task: t, view: false })} onViewNotes={() => setNotesFor({ task: t, view: true })} onSpent={() => void openSpent(t)} />
             ))}
           </ul>
@@ -271,7 +275,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, neet = fal
   );
 }
 
-function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void }) {
+function TaskRow({ task: t, celebrating = false, coins, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void; /** Coins the server paid for finishing it just now. */ coins?: number }) {
   const done = t.status === "done" || celebrating;
   /** Past days are read-only: no ticking, logging, editing or deleting. */
   const locked = lockedProblem(t, today());
@@ -283,8 +287,9 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
       {/* Phones: a rounded card with a round check, the day and time on top, and a ⋯ menu. */}
       <div className="pw-card flex items-start gap-3 rounded-[28px] bg-canvas-raised p-3 pr-3.5 md:hidden">
         <button onClick={onToggle} disabled={!!locked && !lateOk && !celebrating} title={tickTitle} aria-label={done ? "Mark as not done" : "Mark as done"}
-          className={cn("ml-1.5 mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30", celebrating && "check-burst")}>
+          className={cn("relative ml-1.5 mt-2.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30", celebrating && "check-burst")}>
           {done && <Check className={cn("h-3.5 w-3.5", celebrating && "check-pop")} strokeWidth={3} />}
+          {celebrating && !!coins && <CoinPop amount={coins} />}
         </button>
         <div className="min-w-0 flex-1 pt-2">
           {/* The day, time and length on top: tap to set the time spent on the option wheel. */}
@@ -307,8 +312,9 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
 
       <div className="hidden items-start gap-4 px-4 py-4 sm:px-5 md:flex">
       <button onClick={onToggle} disabled={!!locked && !lateOk && !celebrating} title={tickTitle} aria-label={done ? "Mark as not done" : "Mark as done"}
-        className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
+        className={cn("relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50", done ? "border-ink bg-ink text-canvas" : "border-overlay/30")}>
         {done && <Check className={cn("h-3.5 w-3.5", celebrating && "check-pop")} strokeWidth={3} />}
+        {celebrating && !!coins && <CoinPop amount={coins} />}
       </button>
       <div className="min-w-0 flex-1">
         <p className={cn("break-words", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</p>
@@ -331,6 +337,15 @@ function TaskRow({ task: t, celebrating = false, onToggle, onEdit, onLog, onDele
       </div>}
       </div>
     </li>
+  );
+}
+
+/** The gold coins a finished task earns, popping up from its tick box. */
+function CoinPop({ amount }: { amount: number }) {
+  return (
+    <span className="coin-pop pointer-events-none absolute left-1/2 top-1/2 z-10 flex items-center gap-1 whitespace-nowrap rounded-full bg-canvas-raised/90 py-0.5 pl-0.5 pr-2 text-[12px] font-semibold tabular-nums text-[#D99A0B] shadow-themed" aria-hidden>
+      <GoldCoin size={16} />+{amount}
+    </span>
   );
 }
 

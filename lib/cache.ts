@@ -149,6 +149,9 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
     return;
   }
 
+  // Gold coins (the wallet is never cached): buying Premium touches nothing else.
+  if (path.startsWith("/todo/coins")) return;
+
   // Logged time removed, or anything else: whatever it touches is read again next time.
   if (path.startsWith("/todo/logs")) { drop((k) => derived(k) || pathOf(k) === "/todo/tasks" || pathOf(k) === "/calendar/events"); return; }
   if (path.startsWith("/todo") || path.startsWith("/calendar")) drop((k) => k.startsWith("/todo") || k.startsWith("/calendar"));
