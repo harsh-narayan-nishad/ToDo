@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api";
 import { readHabitCsv } from "@/lib/habitCsv";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
-  TEMPLATES, averageClock, canCheckIn, categoryLabel, toggleDay, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
+  TEMPLATES, averageClock, categoryLabel, toggleDay, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
   type EntryIndex, type Habit, type HabitEntry, type HabitInput, type HabitScale,
 } from "@/lib/habits";
 import { cn } from "@/lib/utils";
@@ -420,7 +420,6 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   const step = h.kind === "duration" ? (h.target >= 60 ? 15 : 5) : Math.max(1, Math.round(goal(h) / 10));
   const [wheel, setWheel] = useState(false);
   const [notesOpen, setNotesOpen] = useState<"add" | "view" | null>(null);
-  const week = Array.from({ length: 7 }, (_, i) => addDays(now, i - 6));
 
   return (
     <li className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:flex-nowrap sm:px-5", card && "pw-card max-md:items-start max-md:gap-x-3 max-md:rounded-[28px] max-md:bg-canvas-raised max-md:p-3 max-md:pr-3.5", className)}>
@@ -441,27 +440,6 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
         </span>
         {h.cue && <span className="mt-1 block truncate text-xs italic text-ink-faint">{h.cue}</span>}
       </button>
-      {/* The last 7 days as day circles: tap one to tick it (or untick it); a day not planned, or before the habit began, cannot be. */}
-      <span className={cn("flex items-center gap-1", card ? "order-4 w-full pl-[2.125rem] sm:order-none sm:w-auto sm:pl-0" : "order-4 w-full pl-9 sm:order-none sm:w-auto sm:pl-0")} role="group" aria-label="Last 7 days">
-        {week.map((d) => {
-          const e2 = byDay?.get(d);
-          const p = progress(h, e2);
-          const planned = isPlanned(h, d);
-          const sk = isSkipped(e2);
-          const can = !!onDay && canCheckIn(h, d, now);
-          const state = sk ? "skipped" : p >= 1 ? "done" : p > 0 ? `${Math.round(p * 100)}%` : planned ? (d === now ? "not yet" : "missed") : "not planned";
-          const letter = ["M", "T", "W", "T", "F", "S", "S"][(new Date(d + "T12:00").getDay() + 6) % 7];
-          return (
-            <button key={d} type="button" disabled={!can} onClick={() => can && onDay?.(d)}
-              title={`${dayLabel(d, now)}: ${state}${can ? (p >= 1 ? " · tap to undo" : " · tap to tick") : ""}`} aria-label={`${dayLabel(d, now)}: ${state}`} aria-pressed={p >= 1}
-              className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold transition-colors disabled:cursor-default",
-                sk ? "border border-ink/40 text-ink-faint" : p >= 1 ? "bg-ink text-canvas" : p > 0 ? "bg-ink/40 text-canvas" : planned ? "bg-overlay/[0.08] text-ink-muted" : "border border-dashed border-overlay/20 text-ink-faint",
-                d === now && "ring-1 ring-ink/40 ring-offset-1 ring-offset-transparent", can && p < 1 && !sk && "active:bg-overlay/20")}>
-              {p >= 1 ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> : letter}
-            </button>
-          );
-        })}
-      </span>
       {amount && !skipped && (
         <div className="order-3 ml-10 flex shrink-0 items-center gap-1 sm:order-none sm:ml-0">
           <button type="button" onClick={() => onAmount((e?.value ?? 0) - step)} disabled={!e} aria-label={`Less ${h.name}`} className="grid h-8 w-8 place-items-center border border-overlay/15 text-ink-muted disabled:opacity-30"><Minus className="h-4 w-4" /></button>
