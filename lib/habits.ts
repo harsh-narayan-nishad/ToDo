@@ -214,3 +214,16 @@ export function averageClock(times: string[]): string | null {
   m = (m + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
+
+/** A habit can be checked in for today and the 6 days before (the last 7 days); older days are locked. */
+export const HABIT_BACKFILL_DAYS = 6;
+/** Can `day` be ticked or unticked now? In the last 7 days, planned for it, not before the habit began (not sleep: that is logged). */
+export function canCheckIn(h: Habit, day: string, now: string): boolean {
+  const back = Math.round((new Date(now + "T12:00").getTime() - new Date(day + "T12:00").getTime()) / 86_400_000);
+  return h.kind !== "sleep" && !h.archived && day <= now && back <= HABIT_BACKFILL_DAYS && day >= h.startDay && isPlanned(h, day);
+}
+/** Tick a habit for one day (a count or time habit is filled to its goal), or untick it if it was done. */
+export async function toggleDay(h: Habit, day: string, e?: HabitEntry | null): Promise<HabitEntry | null> {
+  if (isDone(h, e)) { await habitApi.clear(h.id, day); return null; }
+  return habitApi.set(h.id, day, h.kind === "count" || h.kind === "duration" ? { value: goal(h) } : {});
+}

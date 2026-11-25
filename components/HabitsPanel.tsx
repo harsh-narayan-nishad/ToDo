@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api";
 import { readHabitCsv } from "@/lib/habitCsv";
 import { addDays, clock, dayLabel, longDay, today } from "@/lib/days";
 import {
-  TEMPLATES, averageClock, categoryLabel, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
+  TEMPLATES, averageClock, canCheckIn, categoryLabel, toggleDay, currentStreak, daysLabel, goal, goalLabel, habitApi, habitStatus, indexEntries, isDone, isDue, isPlanned, isSkipped, kindLabel, STATUS_LABEL, minutesLabel, progress, successRate,
   type EntryIndex, type Habit, type HabitEntry, type HabitInput, type HabitScale,
 } from "@/lib/habits";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,20 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
   }, [now]);
 
   const fail = useCallback((e: unknown) => { setError(e instanceof Error ? e.message : "Could not save."); void load(); }, [load]);
+
+  /** One of the last 7 days ticked or unticked (the day circles): shown at once, then saved. */
+  async function setDay(h: Habit, day: string) {
+    const before = index.get(h.id)?.get(day) ?? null;
+    const put = (entry: HabitEntry | null) => setIndex((prev) => {
+      const next = new Map(prev);
+      const days = new Map(next.get(h.id) ?? []);
+      if (entry) days.set(day, entry); else days.delete(day);
+      next.set(h.id, days);
+      return next;
+    });
+    put(isDone(h, before) ? null : { id: "local", habitId: h.id, day, value: h.kind === "count" || h.kind === "duration" ? h.target : 1, bedTime: null, wakeTime: null, quality: null, note: "" });
+    try { put(await toggleDay(h, day, before)); setError(null); onChanged(); } catch (e) { put(before); setError(e instanceof Error ? e.message : "Could not save."); }
+  }
 
   /** Tick / untick a yes-no or quit habit for today. */
   async function toggle(h: Habit) {
@@ -308,7 +322,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
                   <div key={g.id}>
                     <h3 className="mb-2 flex items-center justify-between text-sm uppercase tracking-wide text-ink-muted"><span>{g.title}</span><span className="normal-case tracking-normal text-ink-faint">{done} of {due}{due < list.length ? ` · ${list.length - due} skipped` : ""}</span></h3>
                     <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
-                      {list.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
+                      {list.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} onDay={(d) => void setDay(h, d)} />)}
                     </ul>
                   </div>
                 );
@@ -317,7 +331,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
                 <div>
                   <h3 className="mb-2 text-sm uppercase tracking-wide text-ink-muted">Not planned today</h3>
                   <ul className="flex flex-col gap-3 md:gap-0 md:divide-y md:divide-overlay/10 md:border md:border-overlay/10 md:bg-canvas-raised">
-                    {restList.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} />)}
+                    {restList.map((h) => <HabitRow key={h.id} card habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => setDetailId(h.id)} onDay={(d) => void setDay(h, d)} />)}
                   </ul>
                 </div>
               )}
@@ -384,7 +398,7 @@ export function HabitsPanel({ version, onChanged }: { version: number; onChanged
 const sleepPreset = (): Partial<HabitInput> => TEMPLATES.find((t) => t.kind === "sleep")!;
 
 /** One habit for today: its control (tick, or − amount +), name and plan, streak, and the last 7 days. */
-export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete, onNotes, className }: {
+export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onOpen, card = false, onDelete, onNotes, onDay, className }: {
   habit: Habit; byDay?: Map<string, HabitEntry>; now: string; onToggle: () => void; onAmount: (v: number) => void; onSkip: (on: boolean) => void; onOpen: () => void;
   /** Phones: a rounded card with a round check, like a task card (used in the Tasks list). */
   card?: boolean;
@@ -394,6 +408,8 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
   onNotes?: (notes: string) => Promise<void>;
   /** Extra classes on the row (e.g. the slide-away when it moves to Done). */
   className?: string;
+  /** Tick or untick one of the last 7 days (the day circles). */
+  onDay?: (day: string) => void;
 }) {
   const e = byDay?.get(now);
   const done = isDone(h, e);
@@ -425,13 +441,25 @@ export function HabitRow({ habit: h, byDay, now, onToggle, onAmount, onSkip, onO
         </span>
         {h.cue && <span className="mt-1 block truncate text-xs italic text-ink-faint">{h.cue}</span>}
       </button>
-      <span className="hidden items-center gap-1 md:flex" aria-label="Last 7 days">
+      {/* The last 7 days as day circles: tap one to tick it (or untick it); a day not planned, or before the habit began, cannot be. */}
+      <span className={cn("flex items-center gap-1", card ? "order-4 w-full pl-[2.125rem] sm:order-none sm:w-auto sm:pl-0" : "order-4 w-full pl-9 sm:order-none sm:w-auto sm:pl-0")} role="group" aria-label="Last 7 days">
         {week.map((d) => {
-          const p = progress(h, byDay?.get(d));
+          const e2 = byDay?.get(d);
+          const p = progress(h, e2);
           const planned = isPlanned(h, d);
-          const sk = isSkipped(byDay?.get(d));
-          return <span key={d} title={`${dayLabel(d, now)}: ${sk ? "skipped" : p >= 1 ? "done" : p > 0 ? `${Math.round(p * 100)}%` : planned ? (d === now ? "not yet" : "missed") : "not planned"}`}
-            className={cn("h-2.5 w-2.5", sk ? "border border-ink/40" : p >= 1 ? "bg-ink" : p > 0 ? "bg-ink/40" : planned ? "bg-overlay/15" : "border border-dashed border-overlay/15")} />;
+          const sk = isSkipped(e2);
+          const can = !!onDay && canCheckIn(h, d, now);
+          const state = sk ? "skipped" : p >= 1 ? "done" : p > 0 ? `${Math.round(p * 100)}%` : planned ? (d === now ? "not yet" : "missed") : "not planned";
+          const letter = ["M", "T", "W", "T", "F", "S", "S"][(new Date(d + "T12:00").getDay() + 6) % 7];
+          return (
+            <button key={d} type="button" disabled={!can} onClick={() => can && onDay?.(d)}
+              title={`${dayLabel(d, now)}: ${state}${can ? (p >= 1 ? " · tap to undo" : " · tap to tick") : ""}`} aria-label={`${dayLabel(d, now)}: ${state}`} aria-pressed={p >= 1}
+              className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold transition-colors disabled:cursor-default",
+                sk ? "border border-ink/40 text-ink-faint" : p >= 1 ? "bg-ink text-canvas" : p > 0 ? "bg-ink/40 text-canvas" : planned ? "bg-overlay/[0.08] text-ink-muted" : "border border-dashed border-overlay/20 text-ink-faint",
+                d === now && "ring-1 ring-ink/40 ring-offset-1 ring-offset-transparent", can && p < 1 && !sk && "active:bg-overlay/20")}>
+              {p >= 1 ? <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> : letter}
+            </button>
+          );
         })}
       </span>
       {amount && !skipped && (

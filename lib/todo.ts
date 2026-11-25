@@ -28,6 +28,10 @@ export interface Task {
   goalId?: string | null;
   /** Every goal it counts toward (a task can serve several); goalId is the first of them. */
   goalIds?: string[];
+  /** A day of a repeating task: the repeating task, until when it repeats, and on how many days in all. */
+  seriesId?: string | null;
+  repeatUntil?: string | null;
+  repeatDays?: number;
 }
 
 export interface WorkLog { id: string; taskId: string; taskTitle: string; day: string; minutes: number; note: string; startTime: string | null; createdAt: string }
@@ -67,6 +71,8 @@ export const todoApi = {
   update: (id: string, patch: Partial<TaskInput> & { status?: Task["status"]; goalIds?: string[] }) =>
     api<Task>(`/todo/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: { ...patch, ...stamp() } }),
   remove: (id: string) => api<void>(`/todo/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  /** Stop repeating: the repeating task's days still to come go; days already past stay. */
+  stopSeries: (seriesId: string) => api<{ removed: number }>(`/todo/series/${encodeURIComponent(seriesId)}`, { method: "DELETE" }),
   /** `startTime` ("HH:MM") is optional; with it the work also appears as a block in the Pacewise calendar. */
   logWork: (id: string, day: string, minutes: number, note: string, startTime?: string) =>
     api<WorkLog>(`/todo/tasks/${encodeURIComponent(id)}/logs`, { method: "POST", body: { day, minutes, note, ...(startTime ? { startTime } : {}), today: today(), tzOffset: tzOffset() } }),
@@ -88,12 +94,17 @@ export interface BulkResult { created: Task[]; skipped: { index: number; title: 
  * A backend from before the planner has no /todo/tasks/bulk (404): then the tasks are added one by one through the
  * normal endpoint, which mirrors each into the calendar the same way.
  */
-export async function createBulk(tasks: TaskInput[]): Promise<BulkResult> {
+/** A repeating task from the planner: ONE task with every planned day (up to two years), not one task per day. */
+export interface SeriesInput { title: string; notes: string; priority: Priority; startTime: string | null; endTime: string | null; goalId?: string | null; days: string[] }
+
+export async function createBulk(tasks: TaskInput[], series: SeriesInput[] = []): Promise<BulkResult> {
   try {
-    return await api<BulkResult>("/todo/tasks/bulk", { method: "POST", body: { tasks, today: today(), tzOffset: tzOffset() } });
+    return await api<BulkResult>("/todo/tasks/bulk", { method: "POST", body: { tasks, series, today: today(), tzOffset: tzOffset() } });
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 404) throw e;
   }
+  // An older server (no plans, no repeating tasks): one task per day, one by one.
+  tasks = [...tasks, ...series.flatMap((s) => s.days.map((d) => ({ title: s.title, notes: s.notes, priority: s.priority, startDay: d, dueDay: d, startTime: s.startTime, endTime: s.endTime, goalId: s.goalId })))];
   const result: BulkResult = { created: [], skipped: [] };
   for (const [index, t] of tasks.entries()) {
     try {

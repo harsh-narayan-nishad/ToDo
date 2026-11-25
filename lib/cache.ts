@@ -106,10 +106,8 @@ export function cacheAfterWrite(method: string, path: string, body: unknown, res
   if (path.startsWith("/todo/tasks")) {
     const tasks = (k: string) => pathOf(k) === "/todo/tasks";
     if (method === "POST" && path === "/todo/tasks" && result) edit<WithId>(tasks, (l) => upsert(l, result as WithId, true));
-    else if (method === "POST" && path === "/todo/tasks/bulk") {
-      const created = ((result as { created?: WithId[] } | undefined)?.created ?? []);
-      edit<WithId>(tasks, (l) => [...created, ...l.filter((x) => !created.some((c) => c.id === x.id))]);
-    } else if ((m = path.match(/^\/todo\/tasks\/([^/]+)$/))) {
+    // A plan: read the list once more, so repeating tasks come with how long they repeat.
+    else if (method === "POST" && path === "/todo/tasks/bulk") drop(tasks); else if ((m = path.match(/^\/todo\/tasks\/([^/]+)$/))) {
       const id = decodeURIComponent(m[1]);
       if (method === "PATCH" && result) edit<WithId>(tasks, (l) => upsert(l, result as WithId));
       else if (method === "DELETE") edit<WithId>(tasks, (l) => l.filter((x) => x.id !== id));

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { goalsApi, type Goal } from "@/lib/goals";
 
 /** Totals and hours worked, all from the server. */
-export function ProfilePanel({ user, version, onOpenDay, onOpenGoals }: { user: User; version: number; onOpenDay: (day: string) => void; /** Opens the Goal review page. */ onOpenGoals: () => void }) {
+export function ProfilePanel({ user, version, onOpenDay, onOpenGoals, onOpenOverdue }: { user: User; version: number; onOpenDay: (day: string) => void; /** Opens the Goal review page. */ onOpenGoals: () => void; /** Opens the Overdue page. */ onOpenOverdue: () => void }) {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const coins = useWallet(version);
@@ -61,8 +61,23 @@ export function ProfilePanel({ user, version, onOpenDay, onOpenGoals }: { user: 
       {coins.wallet ? <CoinsCard wallet={coins.wallet} onWallet={coins.setWallet} /> : coins.error && <p className="text-sm text-accent-extreme" role="alert">{coins.error}</p>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat className="pw-card" label="Tasks created" value={t.created} />
-        <Stat className="pw-card" label="Tasks finished" value={t.completed} tone="green" hint={t.created ? `${Math.round((t.completed / t.created) * 100)}% of created` : undefined} />
+        {/* Tasks created and finished, together: finished out of created, with a bar. */}
+        <div className="pw-card flex h-full flex-col rounded-none border border-overlay/10 bg-canvas-raised p-4 sm:p-5">
+          <span className="text-sm text-ink-muted">Tasks</span>
+          <span className="mt-1 font-display text-3xl tabular-nums text-accent-medium">{t.completed}<span className="text-xl text-ink-faint"> / {t.created}</span></span>
+          <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-overlay/10">
+            <span className="block h-full rounded-full bg-accent-medium transition-[width] duration-500" style={{ width: `${t.created ? Math.min(100, Math.round((t.completed / t.created) * 100)) : 0}%` }} />
+          </span>
+          <span className="mt-auto pt-2 text-xs text-ink-faint">{t.created ? `finished of created · ${Math.round((t.completed / t.created) * 100)}%` : "none created yet"}</span>
+        </div>
+        {/* Every overdue task; a tap opens them all, with a report for each. */}
+        <button type="button" onClick={onOpenOverdue} aria-label={`Overdue: ${t.overdue}. Open every overdue task`}
+          className="pw-card flex h-full flex-col rounded-none border border-overlay/10 bg-canvas-raised p-4 text-left transition-transform active:scale-[0.98] sm:p-5">
+          <span className="text-sm text-ink-muted">Overdue</span>
+          <span className={cn("mt-1 font-display text-3xl tabular-nums", t.overdue ? "text-accent-extreme" : "text-ink")}>{t.overdue}</span>
+          <span className="mt-0.5 text-xs text-ink-faint">{t.overdue ? "past their day, not done" : "nothing overdue"}</span>
+          <span className="mt-auto flex items-center gap-1 pt-2.5 text-[13px] font-medium text-[#3478F6]">View overdue<ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden /></span>
+        </button>
         <Stat className="pw-card" label="Open" value={t.open} hint={t.overdue ? `${t.overdue} overdue` : "none overdue"} tone={t.overdue ? "red" : undefined} />
         {/* Goals reached this year; a tap opens the year's goals (reached and created), like History. */}
         {(() => {

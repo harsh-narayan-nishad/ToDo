@@ -596,7 +596,7 @@ export function HabitDetail({ habit: h, byDay, year, years, onYear, onClose, onE
         </GlassButton>
         {!h.archived && <GlassButton type="button" strong onClick={onEdit}><Pencil className="h-4 w-4" />Edit</GlassButton>}
       </div>
-      <p className="-mt-2 flex items-center justify-end gap-1.5 text-xs text-ink-faint"><Flame className="h-3.5 w-3.5" aria-hidden />Only today can be checked in; past days are locked.</p>
+      <p className="-mt-2 flex items-center justify-end gap-1.5 text-xs text-ink-faint"><Flame className="h-3.5 w-3.5" aria-hidden />Tick any of the last 7 days from the day circles; older days are locked.</p>
     </GlassSheet>
   );
 }

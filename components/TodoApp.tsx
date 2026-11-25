@@ -17,6 +17,7 @@ import { HabitsPanel } from "@/components/HabitsPanel";
 import { ProfilePanel } from "@/components/ProfilePanel";
 import { GoalSheet, GoalsPanel } from "@/components/GoalsPanel";
 import { GoalReviewPanel } from "@/components/GoalReviewPanel";
+import { OverduePanel } from "@/components/OverduePanel";
 import { CalendarPanel } from "@/components/Calendar/CalendarPanel";
 import { api, ApiError, logout, session, type User } from "@/lib/api";
 import { today } from "@/lib/days";
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { isNeetAspirant, isSoftwareEngineer } from "@/lib/neetSyllabus";
 import { isPremium, useWallet } from "@/lib/coins";
 
-type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs" | "goals" | "review";
+type Tab = "tasks" | "history" | "habits" | "profile" | "calendar" | "docs" | "goals" | "review" | "overdue";
 const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   // History is in the hamburger menu, not here.
@@ -39,9 +40,9 @@ const TABS: { id: Tab; label: string; icon: typeof ListChecks }[] = [
 const THEME_KEY = "pacewise-todo-theme";
 /** The gap between two pages side by side during a swipe. */
 const PAGE_GAP = 16;
-const TAB_IDS: Tab[] = ["tasks", "history", "habits", "profile", "calendar", "docs", "goals", "review"];
+const TAB_IDS: Tab[] = ["tasks", "history", "habits", "profile", "calendar", "docs", "goals", "review", "overdue"];
 /** Where ← goes when there is no earlier section in this visit (the app was opened straight on this one). */
-const PARENT: Partial<Record<Tab, Tab>> = { review: "profile" };
+const PARENT: Partial<Record<Tab, Tab>> = { review: "profile", overdue: "profile" };
 /** How many sections deep this visit is (kept across reloads), so ← steps back inside the app and never leaves it. */
 const DEPTH_KEY = "pacewise-todo-depth";
 const depth = { get: () => { try { return Number(sessionStorage.getItem(DEPTH_KEY)) || 0; } catch { return 0; } }, set: (n: number) => { try { sessionStorage.setItem(DEPTH_KEY, String(Math.max(0, n))); } catch { /* storage blocked */ } } };
@@ -311,14 +312,15 @@ export function TodoApp() {
             <ArrowLeft className="h-5 w-5" strokeWidth={2} />
           </button>
         )}
-        <h1 className="font-display text-3xl">{t === "history" ? "History" : t === "docs" ? "Tour" : t === "review" ? "Goal review" : TABS.find((x) => x.id === t)?.label}.</h1>
+        <h1 className="font-display text-3xl">{t === "history" ? "History" : t === "docs" ? "Tour" : t === "review" ? "Goal review" : t === "overdue" ? "Overdue" : TABS.find((x) => x.id === t)?.label}.</h1>
       </div>
       {t === "tasks" && <TasksPanel onChanged={changed} refreshKey={refreshKey} onOpenHabits={() => setTab("habits")} onOpenGoals={() => setTab("goals")} neet={isNeetAspirant(user)} cse={isSoftwareEngineer(user)} onDueNow={peekOnly ? undefined : setDueNow} onOpenCalendar={() => setTab("calendar")} />}
       {t === "history" && <HistoryPanel day={historyDay} setDay={setHistoryDay} version={version} onChanged={changed} />}
       {t === "habits" && <HabitsPanel version={version} onChanged={changed} />}
       {t === "review" && <GoalReviewPanel version={version} />}
+      {t === "overdue" && <OverduePanel version={version} />}
       {t === "goals" && <GoalsPanel version={version} onChanged={changed} />}
-      {t === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} onOpenGoals={() => setTab("review")} />}
+      {t === "profile" && <ProfilePanel user={user} version={version} onOpenDay={openDay} onOpenGoals={() => setTab("review")} onOpenOverdue={() => setTab("overdue")} />}
       {t === "calendar" && <CalendarPanel userId={user.id} onChanged={changed} />}
       {t === "docs" && <DocsPanel onTour={() => setTouring(true)} />}
     </>

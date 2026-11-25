@@ -23,7 +23,8 @@ import { GoalSheet } from "@/components/GoalsPanel";
  * weekdays only, once a week, once a month. Every task becomes its own one-day task (so each day can be
  * ticked off on its own) and is added with one request; the server checks each one with the normal rules.
  */
-const MAX_TASKS = 200;
+/** One plan adds at most this many rows (a repeating row is ONE task, however many days it covers). */
+const MAX_ROWS = 50;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 const parse = (day: string) => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d, 12); };
@@ -37,6 +38,8 @@ function presets(now: string): { label: string; from: string; to: string }[] {
     { label: "Next 2 weeks", from: now, to: addDays(now, 13) },
     { label: "This month", from: now, to: monthEnd(now) },
     { label: "Next 30 days", from: now, to: addDays(now, 29) },
+    { label: "Next year", from: now, to: addDays(now, 364) },
+    { label: "Next 2 years", from: now, to: addDays(now, 729) },
   ];
 }
 
@@ -113,7 +116,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
   /** Every day at least one task lands on, for the preview. */
   const allDays = [...new Set([...repeating.flatMap((r) => daysFor(r)), ...dated.map((r) => r.day)])].sort();
   const clashes = useMemo(() => findClashes(rows, daysFor), [rows, daysFor]);
-  const rangeProblem = from < now ? "The first day cannot be in the past." : to < from ? "The last day must be on or after the first day." : span(from, to) > MAX_RANGE_DAYS ? `Plan at most ${MAX_RANGE_DAYS + 1} days at a time.` : null;
+  const rangeProblem = from < now ? "The first day cannot be in the past." : to < from ? "The last day must be on or after the first day." : span(from, to) > MAX_RANGE_DAYS ? "Plan at most two years at a time." : null;
   const problem =
     rangeProblem ??
     (filled.length === 0 ? "Give at least one task a title." : null) ??
@@ -122,7 +125,7 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
     dated.filter((r) => r.day < now).map((r) => `“${r.title.trim()}”: its date is in the past.`)[0] ??
     repeating.filter((r) => daysFor(r).length === 0).map((r) => `“${r.title.trim()}”: no day in this range matches its repeat.`)[0] ??
     clashes.message ??
-    (total > MAX_TASKS ? `That is ${total} tasks; one plan can add at most ${MAX_TASKS}. Shorten the range or repeat less often.` : null);
+    (filled.length > MAX_ROWS ? `That is ${filled.length} tasks; one plan can add at most ${MAX_ROWS}.` : null);
 
 
   async function submit() {
@@ -142,7 +145,10 @@ export function TaskPlanner({ onClose, onCreated, neet = false, contests }: { on
         onClose();
         return;
       }
-      const res = await createBulk(tasks);
+      // A row repeating on several days is ONE repeating task (with its days), not a task per day.
+      const series = repeating.filter((r) => daysFor(r).length > 1).map((r) => ({ title: r.title.trim(), notes: r.notes.trim(), priority: r.priority, startTime: r.allDay ? null : r.startTime, endTime: r.allDay ? null : r.endTime, goalId: r.goalId || goalId || null, days: daysFor(r) }));
+      const singles = [...repeating.filter((r) => daysFor(r).length === 1).map((r) => task(r, daysFor(r)[0])), ...dated.map((r) => task(r, r.day))];
+      const res = await createBulk(singles, series);
       if (res.created.length) { added.current = true; clearDraft(); onCreated(res.created); }
       if (res.skipped.length === 0) { onClose(); return; }
       setResult(res);

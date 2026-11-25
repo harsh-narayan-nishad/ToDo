@@ -22,7 +22,8 @@ const ORD = ["", "", "2nd", "3rd", "4th", "5th", "6th", "7th"];
 export const INTERVALS: { id: Interval; label: string }[] = [2, 3, 4, 5, 6, 7].map((n) => ({ id: `every-${n}` as Interval, label: `Every ${ORD[n]} day` }));
 export const repeatLabel = (r: Repeat) => [...PATTERNS, ...INTERVALS].find((x) => x.id === r)?.label ?? "Every day";
 
-export const MAX_RANGE_DAYS = 365;
+/** A plan (and a repeating task) can run for up to two years. */
+export const MAX_RANGE_DAYS = 730;
 const parse = (day: string) => { const [y, m, d] = day.split("-").map(Number); return new Date(y, m - 1, d, 12); };
 /** 0 = Monday … 6 = Sunday. */
 export const weekday = (day: string) => (parse(day).getDay() + 6) % 7;

@@ -6,7 +6,7 @@ import { HabitRow } from "@/components/HabitsPanel";
 import { ConfirmDialog } from "@/components/ui";
 import { SleepDialog } from "@/components/HabitDialogs";
 import { clock, addDays, today } from "@/lib/days";
-import { habitApi, indexEntries, isDone, isDue, isPlanned, minutesLabel, type EntryIndex, type Habit, type HabitEntry } from "@/lib/habits";
+import { habitApi, indexEntries, isDone, isDue, isPlanned, minutesLabel, toggleDay, type EntryIndex, type Habit, type HabitEntry } from "@/lib/habits";
 
 /**
  * Today's habits inside the Tasks list, checked in right here (same rows as the Habits tab).
@@ -45,6 +45,20 @@ export function TaskHabits({ refreshKey, onlyDone, hideDone = false, onChanged, 
     });
   }, []);
   const fail = useCallback((e: unknown) => { setError(e instanceof Error ? e.message : "Could not save."); void load(); }, [load]);
+
+  /** One of the last 7 days ticked or unticked (the day circles): shown at once, then saved. */
+  async function setDay(h: Habit, day: string) {
+    const before = index.get(h.id)?.get(day) ?? null;
+    const put = (entry: HabitEntry | null) => setIndex((prev) => {
+      const next = new Map(prev);
+      const days = new Map(next.get(h.id) ?? []);
+      if (entry) days.set(day, entry); else days.delete(day);
+      next.set(h.id, days);
+      return next;
+    });
+    put(isDone(h, before) ? null : { id: "local", habitId: h.id, day, value: h.kind === "count" || h.kind === "duration" ? h.target : 1, bedTime: null, wakeTime: null, quality: null, note: "" });
+    try { put(await toggleDay(h, day, before)); setError(null); onChanged(); } catch (e) { put(before); setError(e instanceof Error ? e.message : "Could not save."); }
+  }
 
   async function toggle(h: Habit) {
     const done = isDone(h, index.get(h.id)?.get(now));
@@ -146,7 +160,7 @@ export function TaskHabits({ refreshKey, onlyDone, hideDone = false, onChanged, 
           </li>
         )}
         {shown.map((h) => (
-          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} card onDelete={() => setDeleting(h)}
+          <HabitRow key={h.id} habit={h} byDay={index.get(h.id)} now={now} onToggle={() => void toggle(h)} onAmount={(v) => setAmount(h, v)} onSkip={(on) => void skip(h, on)} onOpen={() => onOpenHabits?.()} card onDelete={() => setDeleting(h)} onDay={(d) => void setDay(h, d)}
             onNotes={async (notes) => { const saved = await habitApi.update(h.id, { notes }); setHabits((hs) => hs.map((x) => (x.id === h.id ? { ...x, ...saved } : x))); }}
             className={cn(hideDone && leaving.has(h.id) && "task-done-out")} />
         ))}
