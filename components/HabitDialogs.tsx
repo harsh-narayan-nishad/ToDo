@@ -329,7 +329,29 @@ export function Section({ title, note, children }: { title: string; note?: React
 }
 
 /** The habit editor's sheet, built like the Menu: a grey grouped page with white rounded groups over a dimmed screen. */
-export function SettingsSheet({ label, onClose, children, wide = false }: { label: string; onClose: () => void; children: React.ReactNode; /** Wider on large screens (Overview). */ wide?: boolean }) {
+/**
+ * Freezes the page's own scrolling while a sheet is open (and gives it back, where it was, when the last one closes).
+ * iPhones ignore overflow: hidden on the page, so the page is pinned in place with position: fixed instead.
+ */
+let locks = 0;
+let saved: { y: number; html: string; body: string; pos: string; top: string; width: string } | null = null;
+function lockPageScroll(): () => void {
+  if (locks++ === 0) {
+    const b = document.body, h = document.documentElement;
+    saved = { y: window.scrollY, html: h.style.overflow, body: b.style.overflow, pos: b.style.position, top: b.style.top, width: b.style.width };
+    h.style.overflow = "hidden"; b.style.overflow = "hidden";
+    b.style.position = "fixed"; b.style.top = `-${saved.y}px`; b.style.width = "100%";
+  }
+  return () => {
+    if (--locks > 0 || !saved) return;
+    const b = document.body, h = document.documentElement, s = saved;
+    h.style.overflow = s.html; b.style.overflow = s.body; b.style.position = s.pos; b.style.top = s.top; b.style.width = s.width;
+    window.scrollTo(0, s.y);
+    saved = null;
+  };
+}
+
+export function SettingsSheet({ label, onClose, children, wide = false, compact = false }: { label: string; onClose: () => void; children: React.ReactNode; /** Wider on large screens (Overview). */ wide?: boolean; /** Opens at a report's usual height (as the goal report), the rest scrolling inside, however long it is. */ compact?: boolean }) {
   const self = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Only the sheet on top closes (a New goal sheet over the Goals sheet closes alone).
@@ -337,15 +359,17 @@ export function SettingsSheet({ label, onClose, children, wide = false }: { labe
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
+  // While a sheet is open the page behind stays still: scrolling, on the sheet or around it, never moves the page.
+  useEffect(() => lockPageScroll(), []);
   return createPortal(
-    <div ref={self} className="pw-menu-backdrop fade-in fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}
+    <div ref={self} className="pw-menu-backdrop fade-in fixed inset-0 z-[100] flex touch-none items-end justify-center overscroll-none sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={label}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={cn("pw-grouped-bg glass-in flex max-h-[92dvh] w-full flex-col", wide ? "max-w-2xl" : "max-w-lg", "overflow-hidden rounded-t-[20px] bg-canvas shadow-themed sm:max-h-[88dvh] sm:rounded-[20px]")}>
+      <div className={cn("pw-grouped-bg glass-in flex w-full flex-col", compact ? "max-h-[min(78dvh,680px)]" : "max-h-[92dvh] sm:max-h-[88dvh]", wide ? "max-w-2xl" : "max-w-lg", "overflow-hidden rounded-t-[20px] bg-canvas shadow-themed sm:rounded-[20px]")}>
         <div className="flex items-center justify-between gap-4 px-5 pb-2 pt-5">
           <h2 className="min-w-0 truncate text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{label}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-overlay/[0.08] text-ink-muted transition-transform active:scale-95"><X className="h-4 w-4" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">{children}</div>
+        <div className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">{children}</div>
       </div>
     </div>,
     document.body,

@@ -16,6 +16,7 @@ import { taskCounts } from "@/components/CountCards";
 import { changeEvent, loadEvents, type CalendarItem } from "@/lib/calendar/events";
 import { CONTEST_PLATFORMS, taskGoalIds, todoApi, type ContestPlatform, type Priority, type Task } from "@/lib/todo";
 import { cn } from "@/lib/utils";
+import { TaskReportSheet } from "@/components/TaskReport";
 import { GoldCoin } from "@/components/GoldCoin";
 import { deadlineLabel, goalsApi, periodLabel, type Goal } from "@/lib/goals";
 import { GoalsPanel } from "@/components/GoalsPanel";
@@ -38,6 +39,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, onOpenGoal
   const [goals, setGoals] = useState<Goal[]>([]);
   useEffect(() => { goalsApi.list().then(setGoals, () => undefined); }, [refreshKey]);
   const goalNames = useMemo(() => new Map(goals.map((x) => [x.id, x.title])), [goals]);
+  /** The task whose report is open. */
+  const [reportFor, setReportFor] = useState<Task | null>(null);
   const weekGoals = goals.filter((g) => g.period === "week" && g.status === "open").sort((a, b) => a.dueDay.localeCompare(b.dueDay));
   /** Notes open for this task (the same popup as the option wheel). */
   const [notesFor, setNotesFor] = useState<{ task: Task; view: boolean } | null>(null);
@@ -254,7 +257,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, onOpenGoal
             {g.items.slice((page(g.key, g.items.length) - 1) * UP_PAGE, page(g.key, g.items.length) * UP_PAGE).map((t) => (
               <TaskRow key={t.id} task={t} celebrating={celebrating.has(t.id)} coins={earned.get(t.id)} goal={taskGoalIds(t).map((id) => goalNames.get(id)).filter(Boolean).join(", ") || undefined} onToggle={() => void toggle(t)} onEdit={() => setEditing(t)} onLog={() => setLogging(t)} onDelete={() => setDeleting(t)}
                 onLinkGoals={() => setLinkFor(t)} onStopRepeat={t.seriesId ? () => setStopping(t) : undefined}
-                onNotes={() => setNotesFor({ task: t, view: false })} onViewNotes={() => setNotesFor({ task: t, view: true })} onSpent={() => void openSpent(t)} />
+                onNotes={() => setNotesFor({ task: t, view: false })} onViewNotes={() => setNotesFor({ task: t, view: true })} onSpent={() => void openSpent(t)} onReport={() => setReportFor(t)} />
             ))}
           </ul>
           {g.items.length > UP_PAGE && <div className="mt-3"><Pager page={page(g.key, g.items.length)} total={g.items.length} limit={UP_PAGE} onPage={(n) => setPages((cur) => ({ ...cur, [g.key]: n }))} /></div>}
@@ -268,6 +271,8 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, onOpenGoal
       <AddButton onClick={() => setPlanning(true)} />
       {planning && <TaskPlanner neet={neet} contests={contestToggle || undefined} onClose={() => setPlanning(false)} onCreated={(list) => { setTasks((cur) => [...list, ...(cur ?? [])]); onChanged(); }} />}
 
+      {reportFor && <TaskReportSheet task={tasks?.find((x) => x.id === reportFor.id) ?? reportFor} tasks={tasks ?? []} goals={goals} onClose={() => setReportFor(null)}
+        onAddNote={() => { const cur = tasks?.find((x) => x.id === reportFor.id) ?? reportFor; setNotesFor({ task: cur, view: false }); }} />}
       {linkFor && (
         <LinkGoalsSheet task={linkFor} goals={goals} onClose={() => setLinkFor(null)}
           onSave={async (ids) => { replace(await todoApi.update(linkFor.id, { goalIds: ids })); void goalsApi.list().then(setGoals, () => undefined); onChanged(); }} />
@@ -308,7 +313,7 @@ export function TasksPanel({ onChanged, refreshKey = 0, onOpenHabits, onOpenGoal
   );
 }
 
-function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onStopRepeat, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void; /** Coins the server paid for finishing it just now. */ coins?: number; /** The goal it counts toward. */ goal?: string; /** Link to goals (any number). */ onLinkGoals: () => void; /** A day of a repeating task: stop it repeating. */ onStopRepeat?: () => void }) {
+function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onStopRepeat, onToggle, onEdit, onLog, onDelete, onNotes, onViewNotes, onSpent, onReport }: { task: Task; celebrating?: boolean; onToggle: () => void; onEdit: () => void; onLog: () => void; onDelete: () => void; onNotes: () => void; onViewNotes: () => void; onSpent: () => void; /** Opens this task's report. */ onReport: () => void; /** Coins the server paid for finishing it just now. */ coins?: number; /** The goal it counts toward. */ goal?: string; /** Link to goals (any number). */ onLinkGoals: () => void; /** A day of a repeating task: stop it repeating. */ onStopRepeat?: () => void }) {
   const done = t.status === "done" || celebrating;
   /** Past days are read-only: no ticking, logging, editing or deleting. */
   const locked = lockedProblem(t, today());
@@ -331,7 +336,7 @@ function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onSto
             <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{rangeLabel(t.startDay, t.dueDay)}</span>
             {t.startTime && <span className="flex items-center gap-1"><Timer className="h-3.5 w-3.5" aria-hidden />{clock(t.startTime)}{planned(t) ? ` · ${duration(planned(t)!)}` : ""}</span>}
           </button>
-          <p className={cn("mt-1 break-words text-[17px] leading-snug", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</p>
+          <button type="button" onClick={onReport} title="Task report" className={cn("mt-1 block w-full break-words text-left text-[17px] leading-snug", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</button>
           {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
             <Badge tone={PRIORITY_TONE[t.priority]} className="rounded-full">{t.priority}</Badge>
@@ -342,7 +347,7 @@ function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onSto
             {locked && (lateOk ? <span className="text-accent-fast" title={tickTitle}>last day to tick off</span> : <span className="flex items-center gap-1" title={locked}><Lock className="h-3 w-3" />locked</span>)}
           </div>
         </div>
-        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} onLinkGoals={onLinkGoals} onStopRepeat={onStopRepeat} onViewNotes={t.notes?.trim() ? onViewNotes : undefined} />}
+        {!locked && <MoreMenu onLog={onLog} onEdit={onEdit} onDelete={onDelete} onNotes={onNotes} onLinkGoals={onLinkGoals} onStopRepeat={onStopRepeat} onViewNotes={t.notes?.trim() ? onViewNotes : undefined} onReport={onReport} />}
       </div>
 
       <div className="hidden items-start gap-4 px-4 py-4 sm:px-5 md:flex">
@@ -352,7 +357,7 @@ function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onSto
         {celebrating && !!coins && <CoinPop amount={coins} />}
       </button>
       <div className="min-w-0 flex-1">
-        <p className={cn("break-words", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</p>
+        <button type="button" onClick={onReport} title="Task report" className={cn("block break-words text-left underline-offset-4 hover:underline", done ? "text-ink-faint line-through" : "text-ink")}>{t.title}</button>
         {t.notes && <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{t.notes}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
           <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
@@ -366,6 +371,7 @@ function TaskRow({ task: t, celebrating = false, coins, goal, onLinkGoals, onSto
         </div>
       </div>
       {!locked && <div className="flex shrink-0 items-center gap-1">
+        <Button size="sm" variant="ghost" onClick={onReport} aria-label="Task report" title="Task report"><BarChart3 className="h-4 w-4" /></Button>
         <Button size="sm" variant="ghost" onClick={onLog} aria-label="Log time"><Clock className="h-4 w-4" /><span className="hidden sm:inline">Log time</span></Button>
         <Button size="sm" variant="ghost" onClick={onNotes} aria-label="Add note" title="Add note"><NotebookPen className="h-4 w-4" /></Button>
         {t.notes?.trim() && <Button size="sm" variant="ghost" onClick={onViewNotes} aria-label="View notes" title="View notes"><Eye className="h-4 w-4" /></Button>}
@@ -586,7 +592,7 @@ function CalendarToday({ events, onOpen, onToggle, celebrating }: { events: Cale
 }
 
 /** Phones: the ⋯ on a task card, with Add note (and View notes when there are some), Log time, Edit and Delete. */
-function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes, onLinkGoals, onStopRepeat }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void; onViewNotes?: () => void; onLinkGoals: () => void; onStopRepeat?: () => void }) {
+function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes, onLinkGoals, onStopRepeat, onReport }: { onLog: () => void; onEdit: () => void; onDelete: () => void; onNotes: () => void; onViewNotes?: () => void; onLinkGoals: () => void; onStopRepeat?: () => void; onReport?: () => void }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
@@ -598,8 +604,8 @@ function MoreMenu({ onLog, onEdit, onDelete, onNotes, onViewNotes, onLinkGoals, 
       {open && (
         <DropdownMenu soft anchor={trigger} label="Task actions" value="" minWidth={200}
           ghost={<span className="pw-circle-btn grid h-full w-full place-items-center rounded-full text-ink"><MoreHorizontal className="h-4 w-4" /></span>} onClose={() => setOpen(false)}
-          groups={[{ title: "", items: [{ id: "notes", label: "Add note", icon: NotebookPen }, ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []), { id: "goals", label: "Link to goals", icon: Target }, { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, ...(onStopRepeat ? [{ id: "stop", label: "Stop repeating", icon: Repeat2, danger: true }] : []), { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
-          onSelect={(id) => (id === "notes" ? onNotes() : id === "view" ? onViewNotes?.() : id === "goals" ? onLinkGoals() : id === "stop" ? onStopRepeat?.() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
+          groups={[{ title: "", items: [...(onReport ? [{ id: "report", label: "Task report", icon: BarChart3 }] : []), { id: "notes", label: "Add note", icon: NotebookPen }, ...(onViewNotes ? [{ id: "view", label: "View notes", icon: Eye }] : []), { id: "goals", label: "Link to goals", icon: Target }, { id: "log", label: "Log time", icon: Clock }, { id: "edit", label: "Edit", icon: Pencil }, ...(onStopRepeat ? [{ id: "stop", label: "Stop repeating", icon: Repeat2, danger: true }] : []), { id: "delete", label: "Delete", icon: Trash2, danger: true }] }]}
+          onSelect={(id) => (id === "report" ? onReport?.() : id === "notes" ? onNotes() : id === "view" ? onViewNotes?.() : id === "goals" ? onLinkGoals() : id === "stop" ? onStopRepeat?.() : id === "log" ? onLog() : id === "edit" ? onEdit() : onDelete())} />
       )}
     </>
   );
